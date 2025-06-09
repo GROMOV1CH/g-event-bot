@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 import python_jwt as jwt
 import os
 import hashlib
-import os
+from fastapi.middleware.cors import CORSMiddleware
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -118,17 +118,21 @@ def get_db():
 
 # Инициализация FastAPI
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
 # Настройка CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # В продакшене лучше указать конкретные домены
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Монтируем статические файлы
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Настраиваем шаблоны
+templates = Jinja2Templates(directory="templates")
 
 # Зависимость для получения сессии БД
 def get_db():
