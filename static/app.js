@@ -606,6 +606,308 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // Загружаем предстоящие мероприятия при старте
+    // Проверяем права администратора при загрузке
+    checkAdminRights();
     loadEvents('upcoming');
-}); 
+    loadPolls();
+});
+
+function checkAdminRights() {
+    const user = webapp.initDataUnsafe.user;
+    if (user && user.id) {
+        fetch(`/api/users/${user.id}/is_admin`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.is_admin) {
+                    document.getElementById('adminButton').style.display = 'block';
+                    loadAdminData();
+                }
+            })
+            .catch(error => console.error('Error checking admin rights:', error));
+    }
+}
+
+function showSection(sectionId) {
+    document.querySelectorAll('.section').forEach(section => {
+        section.classList.remove('active');
+    });
+    document.querySelectorAll('.nav-menu button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    document.getElementById(sectionId).classList.add('active');
+    event.target.classList.add('active');
+}
+
+function loadEvents(type) {
+    document.querySelectorAll('.tab-menu button').forEach(button => {
+        button.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    const eventsList = document.getElementById('eventsList');
+    eventsList.innerHTML = '<div class="loading">Загрузка...</div>';
+
+    fetch(`/api/events?type=${type}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.length === 0) {
+                eventsList.innerHTML = '<div class="no-data">Мероприятий не найдено</div>';
+                return;
+            }
+
+            eventsList.innerHTML = data.map(event => `
+                <div class="event-card">
+                    <h3>${event.title}</h3>
+                    <p>${event.description}</p>
+                    <div class="event-details">
+                        <span>📅 ${formatDate(event.date)}</span>
+                        <span>📍 ${event.location}</span>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading events:', error);
+            eventsList.innerHTML = '<div class="error">Ошибка при загрузке мероприятий. Пожалуйста, попробуйте позже.</div>';
+        });
+}
+
+function loadPolls() {
+    const pollsList = document.getElementById('pollsList');
+    pollsList.innerHTML = '<div class="loading">Загрузка...</div>';
+
+    fetch('/api/polls')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.length === 0) {
+                pollsList.innerHTML = '<div class="no-data">Опросов не найдено</div>';
+                return;
+            }
+
+            pollsList.innerHTML = data.map(poll => `
+                <div class="poll-card">
+                    <h3>${poll.question}</h3>
+                    <div class="poll-options">
+                        ${poll.options.map(option => `
+                            <button onclick="vote(${poll.id}, '${option}')">${option}</button>
+                        `).join('')}
+                    </div>
+                    ${poll.results ? `
+                        <div class="poll-results">
+                            ${Object.entries(poll.results).map(([option, votes]) => `
+                                <div class="result-bar">
+                                    <span>${option}: ${votes} голосов</span>
+                                    <div class="bar" style="width: ${(votes / poll.total_votes * 100)}%"></div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error loading polls:', error);
+            pollsList.innerHTML = '<div class="error">Ошибка при загрузке опросов. Пожалуйста, попробуйте позже.</div>';
+        });
+}
+
+function loadAdminData() {
+    loadAdminEvents();
+    loadAdminPolls();
+}
+
+function loadAdminEvents() {
+    fetch('/api/events/all')
+        .then(response => response.json())
+        .then(data => {
+            const adminEventsList = document.getElementById('adminEventsList');
+            adminEventsList.innerHTML = data.map(event => `
+                <div class="admin-item">
+                    <h4>${event.title}</h4>
+                    <div class="admin-controls">
+                        <button onclick="editEvent(${event.id})">Редактировать</button>
+                        <button onclick="deleteEvent(${event.id})">Удалить</button>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading admin events:', error));
+}
+
+function loadAdminPolls() {
+    fetch('/api/polls/all')
+        .then(response => response.json())
+        .then(data => {
+            const adminPollsList = document.getElementById('adminPollsList');
+            adminPollsList.innerHTML = data.map(poll => `
+                <div class="admin-item">
+                    <h4>${poll.title}</h4>
+                    <div class="admin-controls">
+                        <button onclick="editPoll(${poll.id})">Редактировать</button>
+                        <button onclick="deletePoll(${poll.id})">Удалить</button>
+                    </div>
+                </div>
+            `).join('');
+        })
+        .catch(error => console.error('Error loading admin polls:', error));
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Функции для работы с модальными окнами
+function showCreateEventForm() {
+    document.getElementById('createEventModal').style.display = 'block';
+}
+
+function showCreatePollForm() {
+    document.getElementById('createPollModal').style.display = 'block';
+}
+
+// Закрытие модальных окон
+document.querySelectorAll('.close').forEach(closeBtn => {
+    closeBtn.onclick = function() {
+        this.closest('.modal').style.display = 'none';
+    }
+});
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+
+// Обработка форм
+document.getElementById('createEventForm').onsubmit = function(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const eventData = {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        date: new Date(formData.get('date')).toISOString(),
+        location: formData.get('location')
+    };
+
+    fetch('/api/events', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(eventData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('createEventModal').style.display = 'none';
+        loadAdminEvents();
+        loadEvents('upcoming');
+    })
+    .catch(error => console.error('Error creating event:', error));
+};
+
+document.getElementById('createPollForm').onsubmit = function(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const pollData = {
+        question: formData.get('question'),
+        options: Array.from(formData.getAll('options[]')).filter(option => option.trim() !== '')
+    };
+
+    fetch('/api/polls', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(pollData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('createPollModal').style.display = 'none';
+        loadAdminPolls();
+        loadPolls();
+    })
+    .catch(error => console.error('Error creating poll:', error));
+};
+
+function addOption() {
+    const container = document.getElementById('optionsContainer');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'options[]';
+    input.placeholder = `Вариант ${container.children.length + 1}`;
+    input.required = true;
+    container.appendChild(input);
+}
+
+// Функции для голосования
+function vote(pollId, option) {
+    fetch(`/api/polls/${pollId}/vote`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ option })
+    })
+    .then(response => response.json())
+    .then(data => {
+        loadPolls();
+    })
+    .catch(error => console.error('Error voting:', error));
+}
+
+// Функции для редактирования и удаления
+function editEvent(eventId) {
+    // TODO: Реализовать редактирование мероприятия
+}
+
+function deleteEvent(eventId) {
+    if (confirm('Вы уверены, что хотите удалить это мероприятие?')) {
+        fetch(`/api/events/${eventId}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                loadAdminEvents();
+                loadEvents('upcoming');
+            }
+        })
+        .catch(error => console.error('Error deleting event:', error));
+    }
+}
+
+function editPoll(pollId) {
+    // TODO: Реализовать редактирование опроса
+}
+
+function deletePoll(pollId) {
+    if (confirm('Вы уверены, что хотите удалить этот опрос?')) {
+        fetch(`/api/polls/${pollId}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                loadAdminPolls();
+                loadPolls();
+            }
+        })
+        .catch(error => console.error('Error deleting poll:', error));
+    }
+} 
