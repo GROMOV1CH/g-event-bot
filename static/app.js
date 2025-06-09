@@ -171,6 +171,9 @@ function setupAdminPanel() {
         button.addEventListener('click', () => {
             const tabId = button.getAttribute('data-tab');
             showAdminTab(tabId);
+            if (tabId === 'stats') {
+                loadStats();
+            }
         });
     });
 
@@ -934,5 +937,360 @@ function deletePoll(pollId) {
             }
         })
         .catch(error => console.error('Error deleting poll:', error));
+    }
+}
+
+let tg = window.Telegram.WebApp;
+tg.expand();
+
+let currentEvents = [];
+let myEvents = new Set();
+let searchTimeout;
+
+document.addEventListener('DOMContentLoaded', async function() {
+    // Проверяем права администратора
+    const initData = tg.initData || '';
+    const user = tg.initDataUnsafe?.user;
+    
+    if (user) {
+        try {
+            const response = await fetch('/api/verify_admin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    initData: initData,
+                    user: user
+                })
+            });
+            
+            const data = await response.json();
+            console.log('Admin check response:', data);
+            
+            if (data.is_admin) {
+                console.log('User is admin');
+                document.getElementById('admin-panel-btn').style.display = 'block';
+                document.getElementById('admin-panel').style.display = 'none';
+                setupAdminPanel();
+            } else {
+                console.log('User is not admin:', data.error);
+            }
+        } catch (error) {
+            console.error('Error checking admin rights:', error);
+        }
+    }
+
+    // Загружаем сохраненные мероприятия
+    loadSavedEvents();
+
+    // Настраиваем обработчики кнопок
+    document.getElementById('upcoming-events-btn').addEventListener('click', () => {
+        showContent('events-container');
+        loadEvents('upcoming');
+    });
+
+    document.getElementById('past-events-btn').addEventListener('click', () => {
+        showContent('events-container');
+        loadEvents('past');
+    });
+
+    document.getElementById('my-events-btn').addEventListener('click', () => {
+        showContent('my-events-container');
+        loadMyEvents();
+    });
+
+    document.getElementById('polls-btn').addEventListener('click', () => {
+        showContent('polls-container');
+        loadPolls();
+    });
+
+    document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
+        showContent('admin-panel');
+    });
+
+    document.getElementById('profileButton').addEventListener('click', () => {
+        showContent('my-events-container');
+        loadMyEvents();
+    });
+
+    // Настраиваем поиск и фильтры
+    setupSearchAndFilters();
+
+    // Настраиваем модальное окно напоминания
+    setupReminderModal();
+
+    // Загружаем начальные данные
+    loadEvents('upcoming');
+});
+
+// Функция настройки поиска и фильтров
+function setupSearchAndFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = document.getElementById('searchButton');
+    const monthFilter = document.getElementById('monthFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            filterEvents();
+        }, 300);
+    });
+
+    searchButton.addEventListener('click', filterEvents);
+    monthFilter.addEventListener('change', filterEvents);
+    categoryFilter.addEventListener('change', filterEvents);
+}
+
+// Функция фильтрации мероприятий
+function filterEvents() {
+    const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+    const monthValue = document.getElementById('monthFilter').value;
+    const categoryValue = document.getElementById('categoryFilter').value;
+
+    const filteredEvents = currentEvents.filter(event => {
+        const matchesSearch = event.title.toLowerCase().includes(searchQuery) ||
+                            event.description.toLowerCase().includes(searchQuery) ||
+                            event.location?.toLowerCase().includes(searchQuery);
+
+        const eventDate = new Date(event.date);
+        const matchesMonth = !monthValue || eventDate.getMonth() === parseInt(monthValue);
+        const matchesCategory = !categoryValue || event.category === categoryValue;
+
+        return matchesSearch && matchesMonth && matchesCategory;
+    });
+
+    displayEvents(filteredEvents);
+}
+
+// Функция отображения мероприятий
+function displayEvents(events) {
+    const container = document.getElementById('events-container');
+    container.innerHTML = '';
+
+    if (events.length === 0) {
+        container.innerHTML = '<div class="no-events">Мероприятия не найдены</div>';
+        return;
+    }
+
+    events.forEach(event => {
+        const date = new Date(event.date);
+        const card = document.createElement('div');
+        card.className = 'event-card';
+        card.innerHTML = `
+            <h3>${event.title}</h3>
+            <div class="event-date">${date.toLocaleString('ru-RU')}</div>
+            <p>${event.description}</p>
+            ${event.location ? `<div class="location-info">${event.location}</div>` : ''}
+            <div class="event-actions">
+                <button class="action-button share-button" title="Поделиться">📤</button>
+                <button class="action-button reminder-button" title="Установить напоминание">⏰</button>
+                <button class="action-button save-button ${myEvents.has(event.id) ? 'active' : ''}" title="Сохранить">🌟</button>
+            </div>
+        `;
+
+        // Настраиваем обработчики кнопок
+        const shareButton = card.querySelector('.share-button');
+        const reminderButton = card.querySelector('.reminder-button');
+        const saveButton = card.querySelector('.save-button');
+
+        shareButton.addEventListener('click', () => shareEvent(event));
+        reminderButton.addEventListener('click', () => showReminderModal(event));
+        saveButton.addEventListener('click', () => toggleSaveEvent(event, saveButton));
+
+        container.appendChild(card);
+    });
+}
+
+// Функция для поделиться мероприятием
+function shareEvent(event) {
+    const date = new Date(event.date);
+    const message = `
+🎉 ${event.title}
+
+📅 ${date.toLocaleString('ru-RU')}
+📝 ${event.description}
+${event.location ? `📍 ${event.location}` : ''}
+`;
+    
+    tg.sendData(JSON.stringify({
+        action: 'share_event',
+        event_id: event.id,
+        message: message
+    }));
+}
+
+// Функция настройки модального окна напоминания
+function setupReminderModal() {
+    const modal = document.getElementById('reminder-modal');
+    const closeBtn = modal.querySelector('.close');
+    const form = document.getElementById('reminder-form');
+    const cancelBtn = document.getElementById('cancel-reminder');
+
+    closeBtn.addEventListener('click', () => modal.style.display = 'none');
+    cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const reminderTime = document.getElementById('reminder-time').value;
+        setReminder(form.dataset.eventId, reminderTime);
+        modal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+}
+
+// Функция показа модального окна напоминания
+function showReminderModal(event) {
+    const modal = document.getElementById('reminder-modal');
+    const form = document.getElementById('reminder-form');
+    form.dataset.eventId = event.id;
+    modal.style.display = 'block';
+}
+
+// Функция установки напоминания
+function setReminder(eventId, reminderTime) {
+    const event = currentEvents.find(e => e.id === eventId);
+    if (!event) return;
+
+    const eventDate = new Date(event.date);
+    const reminderDate = new Date(eventDate.getTime() - reminderTime * 60000);
+
+    tg.sendData(JSON.stringify({
+        action: 'set_reminder',
+        event_id: eventId,
+        reminder_time: reminderTime,
+        event_title: event.title,
+        event_date: eventDate.toISOString(),
+        reminder_date: reminderDate.toISOString()
+    }));
+}
+
+// Функция сохранения/удаления мероприятия
+function toggleSaveEvent(event, button) {
+    if (myEvents.has(event.id)) {
+        myEvents.delete(event.id);
+        button.classList.remove('active');
+    } else {
+        myEvents.add(event.id);
+        button.classList.add('active');
+    }
+
+    localStorage.setItem('myEvents', JSON.stringify(Array.from(myEvents)));
+    
+    // Если мы находимся в разделе "Мои события", обновляем список
+    if (document.getElementById('my-events-container').style.display === 'block') {
+        loadMyEvents();
+    }
+}
+
+// Функция загрузки сохраненных мероприятий
+function loadSavedEvents() {
+    const saved = localStorage.getItem('myEvents');
+    if (saved) {
+        myEvents = new Set(JSON.parse(saved));
+    }
+}
+
+// Функция загрузки моих мероприятий
+function loadMyEvents() {
+    const container = document.getElementById('my-events-container');
+    const myEventsList = currentEvents.filter(event => myEvents.has(event.id));
+    
+    if (myEventsList.length === 0) {
+        container.innerHTML = '<div class="no-events">У вас нет сохраненных мероприятий</div>';
+        return;
+    }
+
+    displayEvents(myEventsList);
+}
+
+// Функция отображения контента
+function showContent(contentId) {
+    const containers = ['events-container', 'my-events-container', 'polls-container', 'admin-panel'];
+    containers.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.style.display = id === contentId ? 'block' : 'none';
+        }
+    });
+
+    // Обновляем активную кнопку
+    const buttons = document.querySelectorAll('.nav-menu .button');
+    buttons.forEach(button => {
+        button.classList.remove('active');
+        if (button.id === `${contentId.replace('-container', '')}-btn`) {
+            button.classList.add('active');
+        }
+    });
+}
+
+// Функция загрузки статистики
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+
+        // Статистика мероприятий
+        const eventsStats = document.getElementById('events-stats');
+        eventsStats.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Всего мероприятий</span>
+                <span class="stat-value">${stats.events.total}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Предстоящие</span>
+                <span class="stat-value">${stats.events.upcoming}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Прошедшие</span>
+                <span class="stat-value">${stats.events.past}</span>
+            </div>
+            <div class="chart-container" id="events-chart"></div>
+        `;
+
+        // Статистика опросов
+        const pollsStats = document.getElementById('polls-stats');
+        pollsStats.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Всего опросов</span>
+                <span class="stat-value">${stats.polls.total}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Активные</span>
+                <span class="stat-value">${stats.polls.active}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Завершенные</span>
+                <span class="stat-value">${stats.polls.completed}</span>
+            </div>
+            <div class="chart-container" id="polls-chart"></div>
+        `;
+
+        // Статистика пользователей
+        const usersStats = document.getElementById('users-stats');
+        usersStats.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Всего пользователей</span>
+                <span class="stat-value">${stats.users.total}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Активные сегодня</span>
+                <span class="stat-value">${stats.users.active_today}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Новые за неделю</span>
+                <span class="stat-value">${stats.users.new_this_week}</span>
+            </div>
+            <div class="chart-container" id="users-chart"></div>
+        `;
+
+    } catch (error) {
+        console.error('Error loading stats:', error);
     }
 } 

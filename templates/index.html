@@ -11,40 +11,80 @@
     <div class="container">
         <header class="header">
             <div class="profile-section">
-                <img src="{{ url_for('static', path='images/panda.jpg') }}" alt="Профиль" class="profile-image">
+                <img src="{{ url_for('static', path='images/panda.jpg') }}" alt="Профиль" class="profile-image" id="profileButton">
             </div>
         </header>
 
         <nav class="nav-menu">
             <button id="upcoming-events-btn" class="button active">
-                📅 Предстоящие мероприятия
+                📅 Предстоящие
             </button>
             <button id="past-events-btn" class="button">
-                📜 Прошедшие мероприятия
+                📜 Прошедшие
+            </button>
+            <button id="my-events-btn" class="button">
+                🌟 Мои события
             </button>
             <button id="polls-btn" class="button">
                 📊 Опросы
             </button>
             <button id="admin-panel-btn" class="button admin-button" style="display: none;">
-                ⚙️ Панель управления
+                ⚙️ Управление
             </button>
         </nav>
+
+        <div class="search-filters">
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Поиск мероприятий...">
+                <button id="searchButton">🔍</button>
+            </div>
+            
+            <div class="filters">
+                <select id="monthFilter">
+                    <option value="">Все месяцы</option>
+                    <option value="0">Январь</option>
+                    <option value="1">Февраль</option>
+                    <option value="2">Март</option>
+                    <option value="3">Апрель</option>
+                    <option value="4">Май</option>
+                    <option value="5">Июнь</option>
+                    <option value="6">Июль</option>
+                    <option value="7">Август</option>
+                    <option value="8">Сентябрь</option>
+                    <option value="9">Октябрь</option>
+                    <option value="10">Ноябрь</option>
+                    <option value="11">Декабрь</option>
+                </select>
+
+                <select id="categoryFilter">
+                    <option value="">Все категории</option>
+                    <option value="meeting">Встреча</option>
+                    <option value="concert">Концерт</option>
+                    <option value="exhibition">Выставка</option>
+                    <option value="sport">Спорт</option>
+                    <option value="other">Другое</option>
+                </select>
+            </div>
+        </div>
 
         <div class="content">
             <div id="events-container" class="events-list">
                 <!-- События будут добавлены через JavaScript -->
-                <div class="no-events">Загрузка мероприятий...</div>
+            </div>
+
+            <div id="my-events-container" class="events-list" style="display: none;">
+                <!-- Мои события будут добавлены через JavaScript -->
             </div>
 
             <div id="polls-container" class="polls-list" style="display: none;">
                 <!-- Опросы будут добавлены через JavaScript -->
-                <div class="no-polls">Загрузка опросов...</div>
             </div>
 
             <div id="admin-panel" class="admin-panel" style="display: none;">
                 <div class="admin-tabs">
                     <button class="tab-button active" data-tab="events">Мероприятия</button>
                     <button class="tab-button" data-tab="polls">Опросы</button>
+                    <button class="tab-button" data-tab="stats">Статистика</button>
                 </div>
 
                 <div class="tab-content" id="events-tab">
@@ -67,6 +107,17 @@
                             <div class="form-group">
                                 <label for="description">Описание</label>
                                 <textarea id="description" name="description" required></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="category">Категория</label>
+                                <select id="category" name="category" required>
+                                    <option value="meeting">Встреча</option>
+                                    <option value="concert">Концерт</option>
+                                    <option value="exhibition">Выставка</option>
+                                    <option value="sport">Спорт</option>
+                                    <option value="other">Другое</option>
+                                </select>
                             </div>
                             
                             <div class="form-group">
@@ -134,7 +185,59 @@
                         </form>
                     </div>
                 </div>
+
+                <div class="tab-content" id="stats-tab" style="display: none;">
+                    <div class="stats-container">
+                        <div class="stats-card">
+                            <h3>Статистика мероприятий</h3>
+                            <div id="events-stats">
+                                <!-- Статистика мероприятий -->
+                            </div>
+                        </div>
+                        
+                        <div class="stats-card">
+                            <h3>Статистика опросов</h3>
+                            <div id="polls-stats">
+                                <!-- Статистика опросов -->
+                            </div>
+                        </div>
+                        
+                        <div class="stats-card">
+                            <h3>Активность пользователей</h3>
+                            <div id="users-stats">
+                                <!-- Статистика пользователей -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для настройки напоминания -->
+    <div id="reminder-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Настройка напоминания</h2>
+            <form id="reminder-form">
+                <div class="form-group">
+                    <label for="reminder-time">Напомнить за:</label>
+                    <select id="reminder-time" name="reminder-time" required>
+                        <option value="5">5 минут</option>
+                        <option value="15">15 минут</option>
+                        <option value="30">30 минут</option>
+                        <option value="60">1 час</option>
+                        <option value="180">3 часа</option>
+                        <option value="360">6 часов</option>
+                        <option value="720">12 часов</option>
+                        <option value="1440">1 день</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="button">Установить</button>
+                    <button type="button" class="button button-secondary" id="cancel-reminder">Отмена</button>
+                </div>
+            </form>
         </div>
     </div>
 

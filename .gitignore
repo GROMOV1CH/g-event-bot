@@ -22,8 +22,8 @@ wheels/
 
 # Virtual Environment
 venv/
-ENV/
 env/
+ENV/
 
 # IDE
 .idea/
@@ -35,15 +35,11 @@ env/
 *.db
 *.sqlite3
 
-# Environment variables
-.env
-
 # Logs
 *.log
 
-# Local development settings
-instance/
-.webassets-cache
+# Environment variables
+.env
 
 # System Files
 .DS_Store

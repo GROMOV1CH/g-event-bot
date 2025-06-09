@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, and_, or_
+from sqlalchemy import create_engine, and_, or_, func
 from models import Event, User, Poll, Vote, Base
 from datetime import datetime, timedelta, timezone
 from config import settings
@@ -155,31 +155,47 @@ async def root():
 
 @app.get("/api/events")
 async def get_events(
-    type: str,
-    db: Session = Depends(get_db),
-    token_data: dict = Depends(verify_token)
+    type: str = "upcoming",
+    category: Optional[str] = None,
+    month: Optional[int] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
 ):
+    """Получает список мероприятий с фильтрацией."""
     now = datetime.now(timezone.utc)
     query = db.query(Event)
-    
+
+    # Фильтр по типу (предстоящие/прошедшие)
     if type == "upcoming":
         query = query.filter(Event.date >= now)
-    elif type == "past":
-        query = query.filter(Event.date < now)
     else:
-        raise HTTPException(status_code=400, detail="Invalid event type")
-    
-    events = query.order_by(Event.date).all()
-    return [
-        {
-            "id": event.id,
-            "title": event.title,
-            "description": event.description,
-            "date": event.date.isoformat(),
-            "location": event.location
-        }
-        for event in events
-    ]
+        query = query.filter(Event.date < now)
+
+    # Фильтр по категории
+    if category:
+        query = query.filter(Event.category == category)
+
+    # Фильтр по месяцу
+    if month is not None:
+        query = query.filter(func.extract('month', Event.date) == month)
+
+    # Поиск по тексту
+    if search:
+        search_filter = or_(
+            Event.title.ilike(f"%{search}%"),
+            Event.description.ilike(f"%{search}%"),
+            Event.location.ilike(f"%{search}%")
+        )
+        query = query.filter(search_filter)
+
+    # Сортировка
+    if type == "upcoming":
+        query = query.order_by(Event.date.asc())
+    else:
+        query = query.order_by(Event.date.desc())
+
+    events = query.all()
+    return events
 
 @app.get("/api/events/all")
 async def get_all_events(
@@ -217,21 +233,24 @@ async def get_event(
     }
 
 @app.post("/api/events")
-async def create_event_in_db(
-    event: dict,
-    db: Session = Depends(get_db),
-    user: User = Depends(verify_admin)
-):
-    new_event = Event(
-        title=event['title'],
-        description=event['description'],
-        date=datetime.fromisoformat(event['date']),
-        location=event['location'],
-        created_by=user.id
-    )
-    db.add(new_event)
-    db.commit()
-    return {"message": "Event created successfully"}
+async def create_event(request: Request, db: Session = Depends(get_db)):
+    """Создает новое мероприятие."""
+    try:
+        data = await request.json()
+        event = Event(
+            title=data["title"],
+            description=data["description"],
+            date=datetime.fromisoformat(data["date"].replace('Z', '+00:00')),
+            location=data.get("location"),
+            category=data.get("category", "other")
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        return event
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/api/events/{event_id}")
 async def update_event(
@@ -267,44 +286,20 @@ async def delete_event(
     return {"message": "Event deleted successfully"}
 
 @app.get("/api/polls")
-async def get_polls(
-    db: Session = Depends(get_db),
-    token_data: dict = Depends(verify_token)
-):
+async def get_polls(db: Session = Depends(get_db)):
+    """Получает список активных опросов."""
     now = datetime.now(timezone.utc)
-    user = db.query(User).filter(User.telegram_id == token_data['user_id']).first()
+    polls = db.query(Poll).filter(Poll.end_date >= now).all()
     
-    polls = db.query(Poll).filter(Poll.end_date >= now).order_by(Poll.end_date).all()
-    
-    # Проверяем, голосовал ли пользователь в каждом опросе
-    result = []
+    # Подсчитываем голоса для каждого варианта
     for poll in polls:
-        voted = db.query(Vote).filter(
-            and_(Vote.poll_id == poll.id, Vote.user_id == user.id)
-        ).first() is not None
-        
-        poll_data = {
-            "id": poll.id,
-            "title": poll.title,
-            "description": poll.description,
-            "endDate": poll.end_date.isoformat(),
-            "options": poll.options,
-            "voted": voted
-        }
-        
-        if voted:
-            # Если пользователь уже проголосовал, показываем результаты
-            poll_data["results"] = [
-                {
-                    "text": option["text"],
-                    "votes": option["votes"]
-                }
-                for option in poll.options
-            ]
-        
-        result.append(poll_data)
+        total_votes = sum(len(option.votes) for option in poll.options)
+        for option in poll.options:
+            option_votes = len(option.votes)
+            option.votes_count = option_votes
+            option.votes_percentage = (option_votes / total_votes * 100) if total_votes > 0 else 0
     
-    return result
+    return polls
 
 @app.get("/api/polls/all")
 async def get_all_polls(
@@ -342,20 +337,22 @@ async def get_poll(
     }
 
 @app.post("/api/polls")
-async def create_poll(
-    poll: dict,
-    db: Session = Depends(get_db),
-    _: User = Depends(verify_admin)
-):
-    new_poll = Poll(
-        title=poll['title'],
-        description=poll['description'],
-        end_date=datetime.fromisoformat(poll['endDate']),
-        options=[{"text": opt["text"], "votes": 0} for opt in poll['options']]
-    )
-    db.add(new_poll)
-    db.commit()
-    return {"message": "Poll created successfully"}
+async def create_poll(request: Request, db: Session = Depends(get_db)):
+    """Создает новый опрос."""
+    try:
+        data = await request.json()
+        poll = Poll(
+            title=data["title"],
+            description=data["description"],
+            end_date=datetime.fromisoformat(data["endDate"].replace('Z', '+00:00'))
+        )
+        db.add(poll)
+        db.commit()
+        db.refresh(poll)
+        return poll
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/api/polls/{poll_id}")
 async def update_poll(
@@ -504,4 +501,51 @@ async def verify_admin(request: Request):
         }
     except Exception as e:
         print(f"Error in verify_admin: {str(e)}")
-        return {"is_admin": False, "error": str(e)} 
+        return {"is_admin": False, "error": str(e)}
+
+@app.get("/api/stats")
+async def get_stats(db: Session = Depends(get_db)):
+    """Получает статистику для админ-панели."""
+    now = datetime.now(timezone.utc)
+    
+    # Статистика мероприятий
+    total_events = db.query(func.count(Event.id)).scalar()
+    upcoming_events = db.query(func.count(Event.id)).filter(Event.date >= now).scalar()
+    past_events = db.query(func.count(Event.id)).filter(Event.date < now).scalar()
+    
+    # Статистика опросов
+    total_polls = db.query(func.count(Poll.id)).scalar()
+    active_polls = db.query(func.count(Poll.id)).filter(Poll.end_date >= now).scalar()
+    completed_polls = db.query(func.count(Poll.id)).filter(Poll.end_date < now).scalar()
+    
+    # Статистика пользователей
+    total_users = db.query(func.count(User.id)).scalar()
+    active_today = db.query(func.count(User.id)).filter(
+        User.last_active >= now - timedelta(days=1)
+    ).scalar()
+    new_this_week = db.query(func.count(User.id)).filter(
+        User.created_at >= now - timedelta(days=7)
+    ).scalar()
+    
+    return {
+        "events": {
+            "total": total_events,
+            "upcoming": upcoming_events,
+            "past": past_events,
+            "by_category": db.query(
+                Event.category,
+                func.count(Event.id)
+            ).group_by(Event.category).all()
+        },
+        "polls": {
+            "total": total_polls,
+            "active": active_polls,
+            "completed": completed_polls,
+            "total_votes": db.query(func.count(Vote.id)).scalar()
+        },
+        "users": {
+            "total": total_users,
+            "active_today": active_today,
+            "new_this_week": new_this_week
+        }
+    } 
