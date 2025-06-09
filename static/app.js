@@ -81,28 +81,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     const pollsContainer = document.getElementById('polls-container');
     const adminPanel = document.getElementById('admin-panel');
 
-    // Обработчики кнопок навигации
-    upcomingEventsBtn.addEventListener('click', () => {
-        showSection('events');
+    // Настраиваем обработчики кнопок
+    document.getElementById('upcoming-events-btn').addEventListener('click', () => {
+        showContent('events-container');
         loadEvents('upcoming');
+        updateActiveButton('upcoming-events-btn');
     });
 
-    pastEventsBtn.addEventListener('click', () => {
-        showSection('events');
+    document.getElementById('past-events-btn').addEventListener('click', () => {
+        showContent('events-container');
         loadEvents('past');
+        updateActiveButton('past-events-btn');
     });
 
-    pollsBtn.addEventListener('click', () => {
-        showSection('polls');
+    document.getElementById('polls-btn').addEventListener('click', () => {
+        showContent('polls-container');
         loadPolls();
+        updateActiveButton('polls-btn');
     });
 
-    if (adminPanelBtn) {
-        adminPanelBtn.addEventListener('click', () => {
-            showSection('admin');
-            loadAdminData();
+    document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
+        showContent('admin-panel');
+        updateActiveButton('admin-panel-btn');
+    });
+
+    document.getElementById('profileButton').addEventListener('click', () => {
+        showContent('my-events-container');
+        loadMyEvents();
+        // Убираем активное состояние со всех кнопок навигации
+        document.querySelectorAll('.nav-menu .button').forEach(button => {
+            button.classList.remove('active');
         });
-    }
+    });
 
     // Функция для отображения нужной секции
     function showSection(section) {
@@ -988,30 +998,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('upcoming-events-btn').addEventListener('click', () => {
         showContent('events-container');
         loadEvents('upcoming');
+        updateActiveButton('upcoming-events-btn');
     });
 
     document.getElementById('past-events-btn').addEventListener('click', () => {
         showContent('events-container');
         loadEvents('past');
-    });
-
-    document.getElementById('my-events-btn').addEventListener('click', () => {
-        showContent('my-events-container');
-        loadMyEvents();
+        updateActiveButton('past-events-btn');
     });
 
     document.getElementById('polls-btn').addEventListener('click', () => {
         showContent('polls-container');
         loadPolls();
+        updateActiveButton('polls-btn');
     });
 
     document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
         showContent('admin-panel');
+        updateActiveButton('admin-panel-btn');
     });
 
     document.getElementById('profileButton').addEventListener('click', () => {
         showContent('my-events-container');
         loadMyEvents();
+        // Убираем активное состояние со всех кнопок навигации
+        document.querySelectorAll('.nav-menu .button').forEach(button => {
+            button.classList.remove('active');
+        });
     });
 
     // Настраиваем поиск и фильтры
@@ -1210,6 +1223,14 @@ function loadMyEvents() {
     displayEvents(myEventsList);
 }
 
+// Функция обновления активной кнопки
+function updateActiveButton(buttonId) {
+    document.querySelectorAll('.nav-menu .button').forEach(button => {
+        button.classList.remove('active');
+    });
+    document.getElementById(buttonId).classList.add('active');
+}
+
 // Функция отображения контента
 function showContent(contentId) {
     const containers = ['events-container', 'my-events-container', 'polls-container', 'admin-panel'];
@@ -1217,15 +1238,6 @@ function showContent(contentId) {
         const element = document.getElementById(id);
         if (element) {
             element.style.display = id === contentId ? 'block' : 'none';
-        }
-    });
-
-    // Обновляем активную кнопку
-    const buttons = document.querySelectorAll('.nav-menu .button');
-    buttons.forEach(button => {
-        button.classList.remove('active');
-        if (button.id === `${contentId.replace('-container', '')}-btn`) {
-            button.classList.add('active');
         }
     });
 }
