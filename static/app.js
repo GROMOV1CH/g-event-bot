@@ -227,43 +227,24 @@ function setupEventForm() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const formData = {
-            title: form.title.value,
-            description: form.description.value,
-            date: new Date(form.date.value).toISOString(),
-            location: form.location.value,
-            category: form.category.value
-        };
-        
         try {
-            const response = await fetch('/api/events', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
+            const formData = {
+                title: form.title.value.trim(),
+                description: form.description.value.trim(),
+                date: new Date(form.date.value).toISOString(),
+                location: form.location.value.trim(),
+                category: form.category.value
+            };
             
-            if (response.ok) {
-                form.reset();
-                document.getElementById('create-event-form').style.display = 'none';
-                document.getElementById('events-management').style.display = 'block';
-                
-                // Обновляем список мероприятий
-                if (document.getElementById('upcoming-events-btn').classList.contains('active')) {
-                    loadEvents('upcoming');
-                } else if (document.getElementById('past-events-btn').classList.contains('active')) {
-                    loadEvents('past');
-                }
-                
-                tg.showAlert('Мероприятие успешно создано!');
-            } else {
-                const error = await response.json();
-                tg.showAlert(`Ошибка: ${error.detail}`);
-            }
+            await createEvent(formData);
+            
+            form.reset();
+            document.getElementById('create-event-form').style.display = 'none';
+            document.getElementById('events-management').style.display = 'block';
+            
+            tg.showAlert('Мероприятие успешно создано!');
         } catch (error) {
-            console.error('Error creating event:', error);
-            tg.showAlert('Произошла ошибка при создании мероприятия');
+            tg.showAlert(`Ошибка: ${error.message}`);
         }
     });
 }
@@ -297,51 +278,32 @@ function setupPollForm() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const options = Array.from(form.querySelectorAll('input[name="options[]"]'))
-            .map(input => input.value.trim())
-            .filter(value => value !== '');
-        
-        if (options.length < 2) {
-            tg.showAlert('Добавьте как минимум 2 варианта ответа');
-            return;
-        }
-        
-        const formData = {
-            title: form.title.value.trim(),
-            description: form.description.value.trim(),
-            endDate: new Date(form.endDate.value).toISOString(),
-            options: options.map(text => ({ text }))
-        };
-        
-        if (!formData.title || !formData.description || !formData.endDate) {
-            tg.showAlert('Заполните все обязательные поля');
-            return;
-        }
-        
         try {
-            const response = await fetch('/api/polls', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
+            const options = Array.from(form.querySelectorAll('input[name="options[]"]'))
+                .map(input => input.value.trim())
+                .filter(value => value !== '');
             
-            if (response.ok) {
-                form.reset();
-                resetPollOptions();
-                document.getElementById('create-poll-form').style.display = 'none';
-                document.getElementById('polls-management').style.display = 'block';
-                
-                loadPolls();
-                tg.showAlert('Опрос успешно создан!');
-            } else {
-                const error = await response.json();
-                tg.showAlert(`Ошибка: ${error.detail}`);
+            if (options.length < 2) {
+                throw new Error('Добавьте как минимум 2 варианта ответа');
             }
+            
+            const formData = {
+                title: form.title.value.trim(),
+                description: form.description.value.trim(),
+                end_date: new Date(form.endDate.value).toISOString(),
+                options: options.map(text => ({ text }))
+            };
+            
+            await createPoll(formData);
+            
+            form.reset();
+            resetPollOptions();
+            document.getElementById('create-poll-form').style.display = 'none';
+            document.getElementById('polls-management').style.display = 'block';
+            
+            tg.showAlert('Опрос успешно создан!');
         } catch (error) {
-            console.error('Error creating poll:', error);
-            tg.showAlert('Произошла ошибка при создании опроса');
+            tg.showAlert(`Ошибка: ${error.message}`);
         }
     });
 }
@@ -1367,10 +1329,12 @@ async function loadStats() {
         // Таблица пользователей
         const usersTableBody = document.getElementById('users-table-body');
         usersTableBody.innerHTML = usersData.users.map(user => `
-            <tr>
+            <tr class="${user.is_active ? 'active-user' : ''}">
                 <td>${user.id}</td>
                 <td>${user.username ? '@' + user.username : 'Нет username'}</td>
-                <td>${formatDate(new Date(user.last_active))}</td>
+                <td>
+                    ${user.is_active ? '<span class="status-badge active">Онлайн</span>' : formatDate(new Date(user.last_active))}
+                </td>
             </tr>
         `).join('');
 
@@ -1400,5 +1364,81 @@ function formatDate(date) {
             hour: '2-digit',
             minute: '2-digit'
         });
+    }
+}
+
+// Функция создания мероприятия
+async function createEvent(formData) {
+    try {
+        const user = tg.initDataUnsafe?.user;
+        if (!user) {
+            throw new Error('Не удалось получить данные пользователя');
+        }
+
+        const response = await fetch('/api/events', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...formData,
+                created_by: user.id
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail);
+        }
+
+        const result = await response.json();
+        
+        // Обновляем список мероприятий
+        if (document.getElementById('upcoming-events-btn').classList.contains('active')) {
+            await loadEvents('upcoming');
+        } else if (document.getElementById('past-events-btn').classList.contains('active')) {
+            await loadEvents('past');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('Error creating event:', error);
+        throw error;
+    }
+}
+
+// Функция создания опроса
+async function createPoll(formData) {
+    try {
+        const user = tg.initDataUnsafe?.user;
+        if (!user) {
+            throw new Error('Не удалось получить данные пользователя');
+        }
+
+        const response = await fetch('/api/polls', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...formData,
+                created_by: user.id
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail);
+        }
+
+        const result = await response.json();
+        
+        // Обновляем список опросов
+        await loadPolls();
+        
+        return result;
+    } catch (error) {
+        console.error('Error creating poll:', error);
+        throw error;
     }
 } 

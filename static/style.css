@@ -479,6 +479,14 @@ body {
     background-color: rgba(255, 127, 80, 0.1);
 }
 
+.users-table tr.active-user {
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+.users-table tr.active-user:hover {
+    background-color: rgba(76, 175, 80, 0.2);
+}
+
 .user-status {
     display: inline-block;
     padding: 4px 8px;
@@ -494,6 +502,19 @@ body {
 
 .user-status.inactive {
     background-color: #9E9E9E;
+    color: white;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.active {
+    background-color: #4CAF50;
     color: white;
 }
 

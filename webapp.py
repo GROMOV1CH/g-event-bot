@@ -233,43 +233,34 @@ async def get_event(
     }
 
 @app.post("/api/events")
-async def create_event(request: Request, db: Session = Depends(get_db)):
+async def create_event(event: EventCreate, db: Session = Depends(get_db)):
     """Создает новое мероприятие."""
     try:
-        data = await request.json()
-        
-        # Проверяем обязательные поля
-        if not all(key in data for key in ['title', 'description', 'date']):
-            raise HTTPException(status_code=400, detail="Не все обязательные поля заполнены")
-        
-        # Создаем мероприятие
-        event = Event(
-            title=data["title"],
-            description=data["description"],
-            date=datetime.fromisoformat(data["date"].replace('Z', '+00:00')),
-            location=data.get("location"),
-            category=data.get("category", "other")
+        new_event = Event(
+            title=event.title,
+            description=event.description,
+            date=event.date,
+            location=event.location,
+            category=event.category,
+            created_by=event.created_by
         )
-        
-        db.add(event)
+        db.add(new_event)
         db.commit()
-        db.refresh(event)
+        db.refresh(new_event)
         
         # Возвращаем созданное мероприятие
         return {
-            "id": event.id,
-            "title": event.title,
-            "description": event.description,
-            "date": event.date.isoformat(),
-            "location": event.location,
-            "category": event.category
+            "id": new_event.id,
+            "title": new_event.title,
+            "description": new_event.description,
+            "date": new_event.date.isoformat(),
+            "location": new_event.location,
+            "category": new_event.category,
+            "created_by": new_event.created_by
         }
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Неверный формат данных: {str(e)}")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ошибка создания мероприятия: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/api/events/{event_id}")
 async def update_event(
@@ -356,53 +347,37 @@ async def get_poll(
     }
 
 @app.post("/api/polls")
-async def create_poll(request: Request, db: Session = Depends(get_db)):
+async def create_poll(poll: PollCreate, db: Session = Depends(get_db)):
     """Создает новый опрос."""
     try:
-        data = await request.json()
-        
-        # Проверяем обязательные поля
-        if not all(key in data for key in ['title', 'description', 'endDate', 'options']):
-            raise HTTPException(status_code=400, detail="Не все обязательные поля заполнены")
-        
-        if len(data['options']) < 2:
-            raise HTTPException(status_code=400, detail="Опрос должен содержать минимум 2 варианта ответа")
-        
-        # Создаем опрос
-        poll = Poll(
-            title=data["title"],
-            description=data["description"],
-            end_date=datetime.fromisoformat(data["endDate"].replace('Z', '+00:00'))
+        new_poll = Poll(
+            title=poll.title,
+            description=poll.description,
+            end_date=poll.end_date,
+            created_by=poll.created_by
         )
         
-        db.add(poll)
-        db.flush()  # Получаем ID опроса
+        # Добавляем варианты ответов
+        for option in poll.options:
+            poll_option = PollOption(text=option.text)
+            new_poll.options.append(poll_option)
         
-        # Создаем варианты ответов
-        for option_data in data["options"]:
-            option = PollOption(
-                poll_id=poll.id,
-                text=option_data["text"]
-            )
-            db.add(option)
-        
+        db.add(new_poll)
         db.commit()
-        db.refresh(poll)
+        db.refresh(new_poll)
         
         # Возвращаем созданный опрос
         return {
-            "id": poll.id,
-            "title": poll.title,
-            "description": poll.description,
-            "end_date": poll.end_date.isoformat(),
-            "options": [{"id": opt.id, "text": opt.text} for opt in poll.options]
+            "id": new_poll.id,
+            "title": new_poll.title,
+            "description": new_poll.description,
+            "end_date": new_poll.end_date.isoformat(),
+            "created_by": new_poll.created_by,
+            "options": [{"id": opt.id, "text": opt.text} for opt in new_poll.options]
         }
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Неверный формат данных: {str(e)}")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ошибка создания опроса: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.put("/api/polls/{poll_id}")
 async def update_poll(
@@ -603,19 +578,44 @@ async def get_stats(db: Session = Depends(get_db)):
 @app.get("/api/admin/users")
 async def get_users_stats(db: Session = Depends(get_db)):
     """Получает статистику пользователей для админ-панели."""
+    now = datetime.now(timezone.utc)
+    
     # Получаем всех пользователей
     users = db.query(User).order_by(User.last_active.desc()).all()
     
     # Форматируем данные для ответа
     users_data = []
     for user in users:
+        is_active = (now - user.last_active).total_seconds() < 300  # 5 минут
         user_data = {
             "id": user.telegram_id,
             "username": user.username,
-            "last_active": user.last_active.isoformat()
+            "last_active": user.last_active.isoformat(),
+            "is_active": is_active
         }
         users_data.append(user_data)
     
     return {
         "users": users_data
-    } 
+    }
+
+@app.middleware("http")
+async def update_user_activity(request: Request, call_next):
+    """Обновляет время последней активности пользователя."""
+    response = await call_next(request)
+    
+    if "Telegram-Web-App" in request.headers.get("User-Agent", ""):
+        try:
+            init_data = request.query_params.get("initData", "")
+            if init_data:
+                user_data = parse_init_data(init_data)
+                if user_data and "user" in user_data:
+                    db = next(get_db())
+                    user = db.query(User).filter(User.telegram_id == user_data["user"]["id"]).first()
+                    if user:
+                        user.last_active = datetime.now(timezone.utc)
+                        db.commit()
+        except Exception as e:
+            logger.error(f"Error updating user activity: {e}")
+    
+    return response 
