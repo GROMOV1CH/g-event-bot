@@ -237,6 +237,12 @@ async def create_event(request: Request, db: Session = Depends(get_db)):
     """Создает новое мероприятие."""
     try:
         data = await request.json()
+        
+        # Проверяем обязательные поля
+        if not all(key in data for key in ['title', 'description', 'date']):
+            raise HTTPException(status_code=400, detail="Не все обязательные поля заполнены")
+        
+        # Создаем мероприятие
         event = Event(
             title=data["title"],
             description=data["description"],
@@ -244,13 +250,26 @@ async def create_event(request: Request, db: Session = Depends(get_db)):
             location=data.get("location"),
             category=data.get("category", "other")
         )
+        
         db.add(event)
         db.commit()
         db.refresh(event)
-        return event
+        
+        # Возвращаем созданное мероприятие
+        return {
+            "id": event.id,
+            "title": event.title,
+            "description": event.description,
+            "date": event.date.isoformat(),
+            "location": event.location,
+            "category": event.category
+        }
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Неверный формат данных: {str(e)}")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Ошибка создания мероприятия: {str(e)}")
 
 @app.put("/api/events/{event_id}")
 async def update_event(
@@ -341,18 +360,49 @@ async def create_poll(request: Request, db: Session = Depends(get_db)):
     """Создает новый опрос."""
     try:
         data = await request.json()
+        
+        # Проверяем обязательные поля
+        if not all(key in data for key in ['title', 'description', 'endDate', 'options']):
+            raise HTTPException(status_code=400, detail="Не все обязательные поля заполнены")
+        
+        if len(data['options']) < 2:
+            raise HTTPException(status_code=400, detail="Опрос должен содержать минимум 2 варианта ответа")
+        
+        # Создаем опрос
         poll = Poll(
             title=data["title"],
             description=data["description"],
             end_date=datetime.fromisoformat(data["endDate"].replace('Z', '+00:00'))
         )
+        
         db.add(poll)
+        db.flush()  # Получаем ID опроса
+        
+        # Создаем варианты ответов
+        for option_data in data["options"]:
+            option = PollOption(
+                poll_id=poll.id,
+                text=option_data["text"]
+            )
+            db.add(option)
+        
         db.commit()
         db.refresh(poll)
-        return poll
+        
+        # Возвращаем созданный опрос
+        return {
+            "id": poll.id,
+            "title": poll.title,
+            "description": poll.description,
+            "end_date": poll.end_date.isoformat(),
+            "options": [{"id": opt.id, "text": opt.text} for opt in poll.options]
+        }
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Неверный формат данных: {str(e)}")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Ошибка создания опроса: {str(e)}")
 
 @app.put("/api/polls/{poll_id}")
 async def update_poll(

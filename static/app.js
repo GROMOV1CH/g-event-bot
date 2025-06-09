@@ -208,21 +208,31 @@ function showAdminTab(tabId) {
 
 // Функция настройки формы создания мероприятия
 function setupEventForm() {
+    const form = document.getElementById('event-form');
     const createBtn = document.getElementById('create-event-btn');
-    const form = document.getElementById('create-event-form');
     const cancelBtn = document.getElementById('cancel-create');
-
+    
     createBtn.addEventListener('click', () => {
-        form.style.display = 'block';
+        document.getElementById('create-event-form').style.display = 'block';
+        document.getElementById('events-management').style.display = 'none';
     });
-
+    
     cancelBtn.addEventListener('click', () => {
-        form.style.display = 'none';
+        document.getElementById('create-event-form').style.display = 'none';
+        document.getElementById('events-management').style.display = 'block';
+        form.reset();
     });
-
-    document.getElementById('event-form').addEventListener('submit', async (e) => {
+    
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
+        
+        const formData = {
+            title: form.title.value,
+            description: form.description.value,
+            date: new Date(form.date.value).toISOString(),
+            location: form.location.value,
+            category: form.category.value
+        };
         
         try {
             const response = await fetch('/api/events', {
@@ -230,84 +240,137 @@ function setupEventForm() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(Object.fromEntries(formData))
+                body: JSON.stringify(formData)
             });
-
+            
             if (response.ok) {
-                form.style.display = 'none';
-                e.target.reset();
+                // Очищаем форму и скрываем её
+                form.reset();
+                document.getElementById('create-event-form').style.display = 'none';
+                document.getElementById('events-management').style.display = 'block';
+                
+                // Обновляем список мероприятий
                 loadEvents('upcoming');
+                
+                // Показываем уведомление об успехе
+                tg.showAlert('Мероприятие успешно создано!');
             } else {
-                console.error('Error creating event:', await response.text());
+                const error = await response.json();
+                tg.showAlert(`Ошибка: ${error.detail}`);
             }
         } catch (error) {
             console.error('Error creating event:', error);
+            tg.showAlert('Произошла ошибка при создании мероприятия');
         }
     });
 }
 
 // Функция настройки формы создания опроса
 function setupPollForm() {
+    const form = document.getElementById('poll-form');
     const createBtn = document.getElementById('create-poll-btn');
-    const form = document.getElementById('create-poll-form');
     const cancelBtn = document.getElementById('cancel-poll');
     const addOptionBtn = document.getElementById('add-option');
-    const optionsContainer = document.getElementById('poll-options');
-
+    
     createBtn.addEventListener('click', () => {
-        form.style.display = 'block';
+        document.getElementById('create-poll-form').style.display = 'block';
+        document.getElementById('polls-management').style.display = 'none';
     });
-
+    
     cancelBtn.addEventListener('click', () => {
-        form.style.display = 'none';
+        document.getElementById('create-poll-form').style.display = 'none';
+        document.getElementById('polls-management').style.display = 'block';
+        form.reset();
+        resetPollOptions();
     });
-
-    addOptionBtn.addEventListener('click', () => {
-        const optionDiv = document.createElement('div');
-        optionDiv.className = 'poll-option';
-        optionDiv.innerHTML = `
-            <input type="text" name="options[]" required>
-            <button type="button" class="remove-option">✕</button>
-        `;
-        optionsContainer.appendChild(optionDiv);
+    
+    addOptionBtn.addEventListener('click', addPollOption);
+    
+    // Добавляем обработчики удаления для существующих опций
+    document.querySelectorAll('.remove-option').forEach(btn => {
+        btn.addEventListener('click', () => btn.parentElement.remove());
     });
-
-    optionsContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-option')) {
-            e.target.parentElement.remove();
-        }
-    });
-
-    document.getElementById('poll-form').addEventListener('submit', async (e) => {
+    
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
-        const data = {
-            title: formData.get('title'),
-            description: formData.get('description'),
-            endDate: formData.get('endDate'),
-            options: formData.getAll('options[]')
+        
+        const options = Array.from(form.querySelectorAll('input[name="options[]"]'))
+            .map(input => input.value)
+            .filter(value => value.trim() !== '');
+        
+        if (options.length < 2) {
+            tg.showAlert('Добавьте как минимум 2 варианта ответа');
+            return;
+        }
+        
+        const formData = {
+            title: form.title.value,
+            description: form.description.value,
+            endDate: new Date(form.endDate.value).toISOString(),
+            options: options.map(text => ({ text }))
         };
-
+        
         try {
             const response = await fetch('/api/polls', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(formData)
             });
-
+            
             if (response.ok) {
-                form.style.display = 'none';
-                e.target.reset();
+                // Очищаем форму и скрываем её
+                form.reset();
+                resetPollOptions();
+                document.getElementById('create-poll-form').style.display = 'none';
+                document.getElementById('polls-management').style.display = 'block';
+                
+                // Обновляем список опросов
                 loadPolls();
+                
+                // Показываем уведомление об успехе
+                tg.showAlert('Опрос успешно создан!');
             } else {
-                console.error('Error creating poll:', await response.text());
+                const error = await response.json();
+                tg.showAlert(`Ошибка: ${error.detail}`);
             }
         } catch (error) {
             console.error('Error creating poll:', error);
+            tg.showAlert('Произошла ошибка при создании опроса');
         }
     });
+}
+
+// Вспомогательная функция для добавления поля опции в форму опроса
+function addPollOption() {
+    const optionsContainer = document.getElementById('poll-options');
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'poll-option';
+    optionDiv.innerHTML = `
+        <input type="text" name="options[]" required>
+        <button type="button" class="remove-option">✕</button>
+    `;
+    
+    const removeBtn = optionDiv.querySelector('.remove-option');
+    removeBtn.addEventListener('click', () => optionDiv.remove());
+    
+    optionsContainer.appendChild(optionDiv);
+}
+
+// Вспомогательная функция для сброса опций опроса
+function resetPollOptions() {
+    const optionsContainer = document.getElementById('poll-options');
+    // Оставляем только первую опцию
+    const options = optionsContainer.querySelectorAll('.poll-option');
+    for (let i = 1; i < options.length; i++) {
+        options[i].remove();
+    }
+    // Очищаем значение первой опции
+    const firstOption = optionsContainer.querySelector('input[name="options[]"]');
+    if (firstOption) {
+        firstOption.value = '';
+    }
 }
 
 // Функция загрузки мероприятий
