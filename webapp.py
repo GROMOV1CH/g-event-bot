@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from config import settings
 from typing import List, Optional
 import json
-import jwt
+import python_jwt as jwt
 import os
 
 # Database setup
