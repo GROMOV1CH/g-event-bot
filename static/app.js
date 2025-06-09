@@ -66,118 +66,79 @@ function displayEvents(events, containerId) {
     });
 }
 
-// Обработчики кнопок
+// Функция инициализации пользователя
+async function initUser() {
+    try {
+        console.log('Initializing user...');
+        const response = await fetch('/api/auth/init?' + new URLSearchParams({
+            initData: window.Telegram.WebApp.initData
+        }), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to initialize user');
+        }
+
+        const result = await response.json();
+        console.log('User initialized:', result);
+        return result;
+    } catch (error) {
+        console.error('Error initializing user:', error);
+        throw error;
+    }
+}
+
+// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', async function() {
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-    tg.ready();
+    try {
+        // Инициализируем пользователя
+        await initUser();
+        
+        // Настраиваем обработчики кнопок
+        document.getElementById('upcoming-events-btn').addEventListener('click', () => {
+            showContent('events-container', 'upcoming');
+            loadEvents('upcoming');
+        });
 
-    // Инициализация UI
-    const upcomingEventsBtn = document.getElementById('upcoming-events-btn');
-    const pastEventsBtn = document.getElementById('past-events-btn');
-    const pollsBtn = document.getElementById('polls-btn');
-    const adminPanelBtn = document.getElementById('admin-panel-btn');
-    const eventsContainer = document.getElementById('events-container');
-    const pollsContainer = document.getElementById('polls-container');
-    const adminPanel = document.getElementById('admin-panel');
+        document.getElementById('past-events-btn').addEventListener('click', () => {
+            showContent('events-container', 'past');
+            loadEvents('past');
+        });
 
-    // Настраиваем обработчики кнопок
-    document.getElementById('upcoming-events-btn').addEventListener('click', () => {
+        document.getElementById('polls-btn').addEventListener('click', () => {
+            showContent('polls-container');
+            loadPolls();
+        });
+
+        document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
+            showContent('admin-panel');
+        });
+
+        document.getElementById('profileButton').addEventListener('click', () => {
+            showContent('my-events-container');
+            loadMyEvents();
+        });
+
+        // Запускаем периодическое обновление списка пользователей
+        if (document.getElementById('users-table-body')) {
+            // Первая загрузка
+            await loadUsersStats();
+            
+            // Обновляем каждые 30 секунд
+            setInterval(loadUsersStats, 30000);
+        }
+
+        // Загружаем начальные данные
         showContent('events-container', 'upcoming');
         loadEvents('upcoming');
-    });
-
-    document.getElementById('past-events-btn').addEventListener('click', () => {
-        showContent('events-container', 'past');
-        loadEvents('past');
-    });
-
-    document.getElementById('polls-btn').addEventListener('click', () => {
-        showContent('polls-container');
-        loadPolls();
-    });
-
-    document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
-        showContent('admin-panel');
-    });
-
-    document.getElementById('profileButton').addEventListener('click', () => {
-        showContent('my-events-container');
-        loadMyEvents();
-    });
-
-    // Функция для отображения нужной секции
-    function showSection(section) {
-        eventsContainer.style.display = 'none';
-        pollsContainer.style.display = 'none';
-        if (adminPanel) adminPanel.style.display = 'none';
-
-        switch(section) {
-            case 'events':
-                eventsContainer.style.display = 'grid';
-                break;
-            case 'polls':
-                pollsContainer.style.display = 'grid';
-                break;
-            case 'admin':
-                adminPanel.style.display = 'block';
-                break;
-        }
-    }
-
-    // Проверяем права администратора
-    const initData = tg.initData || '';
-    const user = tg.initDataUnsafe?.user;
-    
-    if (user) {
-        try {
-            const response = await fetch('/api/verify_admin', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    initData: initData,
-                    user: user
-                })
-            });
-            
-            const data = await response.json();
-            console.log('Admin check response:', data);
-            
-            if (data.is_admin) {
-                console.log('User is admin');
-                document.getElementById('admin-panel-btn').style.display = 'block';
-                document.getElementById('admin-panel').style.display = 'none';
-                setupAdminPanel();
-            } else {
-                console.log('User is not admin:', data.error);
-            }
-        } catch (error) {
-            console.error('Error checking admin rights:', error);
-        }
-    }
-
-    // Загружаем сохраненные мероприятия
-    loadSavedEvents();
-
-    // Настраиваем поиск и фильтры
-    setupSearchAndFilters();
-
-    // Настраиваем модальное окно напоминания
-    setupReminderModal();
-
-    // Загружаем начальные данные
-    showContent('events-container', 'upcoming');
-    loadEvents('upcoming');
-
-    // Запускаем периодическое обновление списка пользователей
-    if (document.getElementById('users-table-body')) {
-        // Первая загрузка
-        await loadUsersStats();
-        
-        // Обновляем каждые 30 секунд
-        setInterval(loadUsersStats, 30000);
+    } catch (error) {
+        console.error('Error during initialization:', error);
+        tg.showAlert('Произошла ошибка при инициализации приложения');
     }
 });
 

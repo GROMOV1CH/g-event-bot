@@ -565,63 +565,99 @@ async def vote_in_poll(
     db.commit()
     return {"message": "Vote recorded successfully"}
 
-def verify_telegram_data(init_data: str) -> dict:
-    """Проверяет подлинность данных от Telegram Web App."""
+def parse_init_data(init_data: str) -> dict:
+    """Парсит init data из Telegram Web App."""
     try:
-        # Разбираем строку init_data
-        parsed_data = dict(urllib.parse.parse_qsl(init_data))
+        # Декодируем URL-encoded строку
+        decoded = urllib.parse.unquote(init_data)
+        # Разбиваем на параметры
+        params = dict(urllib.parse.parse_qsl(decoded))
+        # Если есть user в виде строки, преобразуем в словарь
+        if 'user' in params and isinstance(params['user'], str):
+            params['user'] = json.loads(params['user'])
+        return params
+    except Exception as e:
+        logger.error(f"Error parsing init data: {e}")
+        return {}
+
+def verify_telegram_data(init_data: str) -> bool:
+    """Проверяет подпись данных от Telegram."""
+    try:
+        # Получаем параметры
+        params = dict(urllib.parse.parse_qsl(init_data))
         
-        # Получаем и удаляем hash из данных
-        received_hash = parsed_data.pop('hash')
+        # Получаем хэш
+        hash_value = params.pop('hash', None)
+        if not hash_value:
+            return False
+            
+        # Сортируем оставшиеся параметры
+        data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted(params.items()))
         
-        # Сортируем оставшиеся поля
-        data_check_string = '\n'.join([f"{k}={v}" for k, v in sorted(parsed_data.items())])
-        
-        # Создаем секретный ключ
+        # Создаем HMAC с использованием токена бота
         secret_key = hmac.new(
-            "WebAppData".encode(),
-            os.getenv("BOT_TOKEN").encode(),
-            hashlib.sha256
+            key=os.getenv('BOT_TOKEN', '').encode(),
+            msg='WebAppData'.encode(),
+            digestmod=hashlib.sha256
         ).digest()
         
-        # Вычисляем хеш
-        calculated_hash = hmac.new(
-            secret_key,
-            data_check_string.encode(),
-            hashlib.sha256
+        # Проверяем подпись
+        signature = hmac.new(
+            key=secret_key,
+            msg=data_check_string.encode(),
+            digestmod=hashlib.sha256
         ).hexdigest()
         
-        # Сравниваем хеши
-        if calculated_hash != received_hash:
-            raise ValueError("Invalid hash")
-        
-        return parsed_data
+        return signature == hash_value
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid Telegram data")
+        logger.error(f"Error verifying Telegram data: {e}")
+        return False
 
-@app.post("/api/verify_admin")
-async def verify_admin(request: Request):
-    """Проверяет права администратора для Telegram Web App."""
+@app.post("/api/auth/init")
+async def init_user(request: Request, db: Session = Depends(get_db)):
+    """Инициализирует пользователя при первом входе в приложение."""
     try:
-        data = await request.json()
-        user_data = data.get('user', {})
-        user_id = user_data.get('id')
+        # Получаем init_data из разных возможных источников
+        init_data = request.query_params.get("initData")
+        if not init_data:
+            init_data = request.headers.get("X-Telegram-Init-Data")
+            
+        if not init_data:
+            raise HTTPException(status_code=400, detail="No init data provided")
         
-        if not user_id:
-            return {"is_admin": False, "error": "No user ID provided"}
+        # Проверяем подпись данных
+        if not verify_telegram_data(init_data):
+            raise HTTPException(status_code=400, detail="Invalid init data signature")
+            
+        # Парсим данные пользователя
+        user_data = parse_init_data(init_data)
+        if not user_data or "user" not in user_data:
+            raise HTTPException(status_code=400, detail="Invalid init data format")
+            
+        tg_user = user_data["user"]
+        user = db.query(User).filter(User.telegram_id == tg_user["id"]).first()
         
-        # Список ID администраторов
-        admin_ids = [677621800]  # Ваш Telegram ID
+        if not user:
+            # Создаем нового пользователя
+            user = User(
+                telegram_id=tg_user["id"],
+                username=tg_user.get("username"),
+                created_at=datetime.now(timezone.utc),
+                last_active=datetime.now(timezone.utc)
+            )
+            db.add(user)
+            logger.info(f"Created new user: {tg_user['id']}")
+        else:
+            # Обновляем время последней активности
+            user.last_active = datetime.now(timezone.utc)
+            logger.info(f"Updated user activity: {tg_user['id']}")
+            
+        db.commit()
+        return {"success": True, "user_id": tg_user["id"]}
         
-        print(f"Checking admin rights for user {user_id}. Is admin: {user_id in admin_ids}")
-        
-        return {
-            "is_admin": user_id in admin_ids,
-            "user_id": user_id
-        }
     except Exception as e:
-        print(f"Error in verify_admin: {str(e)}")
-        return {"is_admin": False, "error": str(e)}
+        logger.error(f"Error initializing user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats")
 async def get_stats(db: Session = Depends(get_db)):
@@ -670,55 +706,6 @@ async def get_stats(db: Session = Depends(get_db)):
         }
     }
 
-def parse_init_data(init_data: str) -> dict:
-    """Парсит init data из Telegram Web App."""
-    try:
-        # Декодируем URL-encoded строку
-        decoded = urllib.parse.unquote(init_data)
-        # Разбиваем на параметры
-        params = dict(urllib.parse.parse_qsl(decoded))
-        # Если есть user в виде строки, преобразуем в словарь
-        if 'user' in params and isinstance(params['user'], str):
-            params['user'] = json.loads(params['user'])
-        return params
-    except Exception as e:
-        logger.error(f"Error parsing init data: {e}")
-        return {}
-
-@app.middleware("http")
-async def update_user_activity(request: Request, call_next):
-    """Обновляет время последней активности пользователя."""
-    try:
-        # Получаем init_data из разных возможных источников
-        init_data = None
-        if "Telegram-Web-App" in request.headers.get("User-Agent", ""):
-            # Пробуем получить из query параметров
-            init_data = request.query_params.get("initData")
-            if not init_data:
-                # Пробуем получить из заголовков
-                init_data = request.headers.get("X-Telegram-Init-Data")
-                
-        if init_data:
-            logger.info(f"Received init data: {init_data[:100]}...")  # Логируем для отладки
-            user_data = parse_init_data(init_data)
-            if user_data and "user" in user_data:
-                user_id = user_data["user"].get("id")
-                if user_id:
-                    logger.info(f"Updating activity for user {user_id}")
-                    db = next(get_db())
-                    user = db.query(User).filter(User.telegram_id == user_id).first()
-                    if user:
-                        user.last_active = datetime.now(timezone.utc)
-                        db.commit()
-                        logger.info(f"Activity updated for user {user_id}")
-                    else:
-                        logger.warning(f"User {user_id} not found in database")
-    except Exception as e:
-        logger.error(f"Error in activity middleware: {e}")
-    
-    response = await call_next(request)
-    return response
-
 @app.get("/api/admin/users")
 async def get_users_stats(db: Session = Depends(get_db)):
     """Получает статистику пользователей для админ-панели."""
@@ -752,4 +739,38 @@ async def get_users_stats(db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Error getting users stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.middleware("http")
+async def update_user_activity(request: Request, call_next):
+    """Обновляет время последней активности пользователя."""
+    try:
+        # Получаем init_data из разных возможных источников
+        init_data = None
+        if "Telegram-Web-App" in request.headers.get("User-Agent", ""):
+            # Пробуем получить из query параметров
+            init_data = request.query_params.get("initData")
+            if not init_data:
+                # Пробуем получить из заголовков
+                init_data = request.headers.get("X-Telegram-Init-Data")
+                
+        if init_data:
+            logger.info(f"Received init data: {init_data[:100]}...")  # Логируем для отладки
+            user_data = parse_init_data(init_data)
+            if user_data and "user" in user_data:
+                user_id = user_data["user"].get("id")
+                if user_id:
+                    logger.info(f"Updating activity for user {user_id}")
+                    db = next(get_db())
+                    user = db.query(User).filter(User.telegram_id == user_id).first()
+                    if user:
+                        user.last_active = datetime.now(timezone.utc)
+                        db.commit()
+                        logger.info(f"Activity updated for user {user_id}")
+                    else:
+                        logger.warning(f"User {user_id} not found in database")
+    except Exception as e:
+        logger.error(f"Error in activity middleware: {e}")
+    
+    response = await call_next(request)
+    return response 
