@@ -1364,37 +1364,13 @@ async function loadStats() {
             </div>
         `;
 
-        // Статистика пользователей
-        const usersStats = document.getElementById('users-stats');
-        usersStats.innerHTML = `
-            <div class="stat-item">
-                <span class="stat-label">Всего пользователей</span>
-                <span class="stat-value">${usersData.stats.total}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Активны сейчас</span>
-                <span class="stat-value">${usersData.stats.active_now}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Новых сегодня</span>
-                <span class="stat-value">${usersData.stats.new_today}</span>
-            </div>
-        `;
-
         // Таблица пользователей
         const usersTableBody = document.getElementById('users-table-body');
         usersTableBody.innerHTML = usersData.users.map(user => `
             <tr>
                 <td>${user.id}</td>
-                <td>${user.username || 'Без имени'}</td>
-                <td>
-                    <span class="user-status ${user.status}">
-                        ${user.status === 'active' ? 'Онлайн' : 'Неактивен'}
-                    </span>
-                </td>
+                <td>${user.username ? '@' + user.username : 'Нет username'}</td>
                 <td>${formatDate(new Date(user.last_active))}</td>
-                <td>${user.saved_events_count}</td>
-                <td>${user.votes_count}</td>
             </tr>
         `).join('');
 
