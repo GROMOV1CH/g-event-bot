@@ -3,11 +3,17 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MenuBut
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import settings
 from datetime import datetime
-from models import User, Event, Reminder
+from models import User, Event, Reminder, Poll
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 import asyncio
+import os
+import jwt
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import WebAppInfo
+from sqlalchemy.orm import sessionmaker
+from models import Base
 
 # Настройка логирования
 logging.basicConfig(
@@ -24,36 +30,48 @@ logger.info(f"Admin IDs: {settings.ADMIN_USER_IDS}")
 
 # Инициализация базы данных
 engine = create_engine(settings.DATABASE_URL)
+Base.metadata.create_all(bind=engine)
+SessionLocal = sessionmaker(bind=engine)
+
+# Генерация JWT токена
+def generate_token(user_id: int) -> str:
+    payload = {
+        "user_id": user_id,
+        "exp": datetime.utcnow() + timedelta(days=1)
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     logger.debug("Entering start handler")
     logger.info(f"Start command received from user {update.effective_user.id}")
     try:
-        # Устанавливаем веб-приложение как основную кнопку меню
-        await context.bot.set_chat_menu_button(
-            chat_id=update.effective_chat.id,
-            menu_button=MenuButtonWebApp(text="Открыть приложение", web_app=WebAppInfo(url=settings.WEBAPP_URL))
+        db = SessionLocal()
+        # Проверяем, существует ли пользователь
+        user = db.query(User).filter(User.telegram_id == update.effective_user.id).first()
+        if not user:
+            # Создаем нового пользователя
+            user = User(telegram_id=update.effective_user.id)
+            db.add(user)
+            db.commit()
+        
+        # Создаем кнопку для открытия веб-приложения
+        webapp_button = types.InlineKeyboardButton(
+            text="Открыть приложение",
+            web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}?token={generate_token(update.effective_user.id)}")
         )
+        keyboard = types.InlineKeyboardMarkup().add(webapp_button)
         
-        keyboard = [
-            [InlineKeyboardButton("Мои подписки", callback_data="my_subscriptions")],
-            [InlineKeyboardButton("Помощь", callback_data="help")]
-        ]
-        
-        if update.effective_user.id in settings.ADMIN_USER_IDS:
-            logger.info(f"User {update.effective_user.id} is admin")
-            keyboard.append([InlineKeyboardButton("Панель администратора", callback_data="admin_panel")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        logger.debug("Sending welcome message")
         await update.message.reply_text(
-            "Добро пожаловать в бот управления мероприятиями! "
-            "Выберите действие или нажмите кнопку 'Открыть приложение' внизу экрана:",
-            reply_markup=reply_markup
+            "Добро пожаловать в бот для управления мероприятиями и опросами! ��\n\n"
+            "Здесь вы можете:\n"
+            "📅 Просматривать предстоящие мероприятия\n"
+            "📜 Смотреть прошедшие мероприятия\n"
+            "📊 Участвовать в опросах\n"
+            "🗳️ Видеть результаты голосований\n\n"
+            "Нажмите кнопку ниже, чтобы открыть приложение:",
+            reply_markup=keyboard
         )
-        logger.debug("Welcome message sent successfully")
     except Exception as e:
         logger.error(f"Error in start handler: {str(e)}")
         raise

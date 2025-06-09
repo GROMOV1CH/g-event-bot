@@ -15,56 +15,133 @@
             </div>
         </header>
 
-        <div class="button-group">
-            <button id="upcoming-events-btn" class="button">
-                📅 Предстоящие мероприятия
-            </button>
-            <button id="past-events-btn" class="button">
-                📜 Прошедшие мероприятия
-            </button>
+        <div class="scroll-container">
+            <div class="button-group">
+                <button id="upcoming-events-btn" class="button">
+                    📅 Предстоящие мероприятия
+                </button>
+                <button id="past-events-btn" class="button">
+                    📜 Прошедшие мероприятия
+                </button>
+                <button id="polls-btn" class="button">
+                    📊 Опросы
+                </button>
+                {% if is_admin %}
+                <button id="admin-panel-btn" class="button admin-button">
+                    ⚙️ Панель управления
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="content-container">
+            <div id="events-container" class="events-list">
+                <!-- События будут добавлены через JavaScript -->
+                <div class="no-events">Загрузка мероприятий...</div>
+            </div>
+
+            <div id="polls-container" class="polls-list" style="display: none;">
+                <!-- Опросы будут добавлены через JavaScript -->
+                <div class="no-polls">Загрузка опросов...</div>
+            </div>
+
             {% if is_admin %}
-            <button id="create-event-btn" class="button">
-                ✨ Создать мероприятие
-            </button>
+            <div id="admin-panel" class="admin-panel" style="display: none;">
+                <div class="admin-tabs">
+                    <button class="tab-button active" data-tab="events">Мероприятия</button>
+                    <button class="tab-button" data-tab="polls">Опросы</button>
+                </div>
+
+                <div class="tab-content" id="events-tab">
+                    <button id="create-event-btn" class="button">
+                        ✨ Создать мероприятие
+                    </button>
+                    
+                    <div id="events-management" class="management-list">
+                        <!-- Список мероприятий для управления -->
+                    </div>
+
+                    <div id="create-event-form" class="admin-controls" style="display: none;">
+                        <h2>Создать мероприятие</h2>
+                        <form id="event-form">
+                            <div class="form-group">
+                                <label for="title">Название мероприятия</label>
+                                <input type="text" id="title" name="title" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="description">Описание</label>
+                                <textarea id="description" name="description" required></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="date">Дата и время</label>
+                                <input type="datetime-local" id="date" name="date" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="location">Место проведения</label>
+                                <input type="text" id="location" name="location">
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="button">Создать</button>
+                                <button type="button" class="button button-secondary" id="cancel-create">Отмена</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="polls-tab" style="display: none;">
+                    <button id="create-poll-btn" class="button">
+                        📊 Создать опрос
+                    </button>
+                    
+                    <div id="polls-management" class="management-list">
+                        <!-- Список опросов для управления -->
+                    </div>
+
+                    <div id="create-poll-form" class="admin-controls" style="display: none;">
+                        <h2>Создать опрос</h2>
+                        <form id="poll-form">
+                            <div class="form-group">
+                                <label for="poll-title">Название опроса</label>
+                                <input type="text" id="poll-title" name="title" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="poll-description">Описание</label>
+                                <textarea id="poll-description" name="description" required></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="poll-end-date">Дата окончания</label>
+                                <input type="datetime-local" id="poll-end-date" name="endDate" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Варианты ответов</label>
+                                <div id="poll-options">
+                                    <div class="poll-option">
+                                        <input type="text" name="options[]" required>
+                                        <button type="button" class="remove-option">✕</button>
+                                    </div>
+                                </div>
+                                <button type="button" id="add-option" class="button button-secondary">
+                                    + Добавить вариант
+                                </button>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="button">Создать</button>
+                                <button type="button" class="button button-secondary" id="cancel-poll">Отмена</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
             {% endif %}
         </div>
-
-        <div id="events-container" class="events-list">
-            <!-- События будут добавлены через JavaScript -->
-            <div class="no-events">Загрузка мероприятий...</div>
-        </div>
-
-        {% if is_admin %}
-        <div id="create-event-form" class="admin-controls" style="display: none;">
-            <h2>Создать мероприятие</h2>
-            <form id="event-form">
-                <div class="form-group">
-                    <label for="title">Название мероприятия</label>
-                    <input type="text" id="title" name="title" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="description">Описание</label>
-                    <textarea id="description" name="description" required></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date">Дата и время</label>
-                    <input type="datetime-local" id="date" name="date" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="location">Место проведения</label>
-                    <input type="text" id="location" name="location">
-                </div>
-                
-                <div class="form-actions">
-                    <button type="submit" class="button">Создать</button>
-                    <button type="button" class="button button-secondary" id="cancel-create">Отмена</button>
-                </div>
-            </form>
-        </div>
-        {% endif %}
     </div>
 
     <script src="{{ url_for('static', path='app.js') }}"></script>
