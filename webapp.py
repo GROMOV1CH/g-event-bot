@@ -581,50 +581,89 @@ async def get_stats(db: Session = Depends(get_db)):
         }
     }
 
-@app.get("/api/admin/users")
-async def get_users_stats(db: Session = Depends(get_db)):
-    """Получает статистику пользователей для админ-панели."""
-    now = datetime.now(timezone.utc)
-    
-    # Получаем всех пользователей
-    users = db.query(User).order_by(User.last_active.desc()).all()
-    
-    # Форматируем данные для ответа
-    users_data = []
-    for user in users:
-        is_active = (now - user.last_active).total_seconds() < 300  # 5 минут
-        user_data = {
-            "id": user.telegram_id,
-            "username": user.username,
-            "last_active": user.last_active.isoformat(),
-            "is_active": is_active
-        }
-        users_data.append(user_data)
-    
-    return {
-        "users": users_data
-    }
+def parse_init_data(init_data: str) -> dict:
+    """Парсит init data из Telegram Web App."""
+    try:
+        # Декодируем URL-encoded строку
+        decoded = urllib.parse.unquote(init_data)
+        # Разбиваем на параметры
+        params = dict(urllib.parse.parse_qsl(decoded))
+        # Если есть user в виде строки, преобразуем в словарь
+        if 'user' in params and isinstance(params['user'], str):
+            params['user'] = json.loads(params['user'])
+        return params
+    except Exception as e:
+        logger.error(f"Error parsing init data: {e}")
+        return {}
 
 @app.middleware("http")
 async def update_user_activity(request: Request, call_next):
     """Обновляет время последней активности пользователя."""
-    response = await call_next(request)
-    
-    if "Telegram-Web-App" in request.headers.get("User-Agent", ""):
-        try:
-            init_data = request.query_params.get("initData", "")
-            if init_data:
-                user_data = parse_init_data(init_data)
-                if user_data and "user" in user_data:
+    try:
+        # Получаем init_data из разных возможных источников
+        init_data = None
+        if "Telegram-Web-App" in request.headers.get("User-Agent", ""):
+            # Пробуем получить из query параметров
+            init_data = request.query_params.get("initData")
+            if not init_data:
+                # Пробуем получить из заголовков
+                init_data = request.headers.get("X-Telegram-Init-Data")
+                
+        if init_data:
+            logger.info(f"Received init data: {init_data[:100]}...")  # Логируем для отладки
+            user_data = parse_init_data(init_data)
+            if user_data and "user" in user_data:
+                user_id = user_data["user"].get("id")
+                if user_id:
+                    logger.info(f"Updating activity for user {user_id}")
                     db = next(get_db())
-                    user = db.query(User).filter(User.telegram_id == user_data["user"]["id"]).first()
+                    user = db.query(User).filter(User.telegram_id == user_id).first()
                     if user:
                         user.last_active = datetime.now(timezone.utc)
                         db.commit()
-        except Exception as e:
-            logger.error(f"Error updating user activity: {e}")
+                        logger.info(f"Activity updated for user {user_id}")
+                    else:
+                        logger.warning(f"User {user_id} not found in database")
+    except Exception as e:
+        logger.error(f"Error in activity middleware: {e}")
     
-    return response 
+    response = await call_next(request)
+    return response
+
+@app.get("/api/admin/users")
+async def get_users_stats(db: Session = Depends(get_db)):
+    """Получает статистику пользователей для админ-панели."""
+    try:
+        now = datetime.now(timezone.utc)
+        logger.info("Fetching users list")
+        
+        # Получаем всех пользователей
+        users = db.query(User).order_by(User.last_active.desc()).all()
+        logger.info(f"Found {len(users)} users")
+        
+        # Форматируем данные для ответа
+        users_data = []
+        for user in users:
+            time_diff = (now - user.last_active).total_seconds() if user.last_active else float('inf')
+            is_active = time_diff < 300  # 5 минут
+            
+            user_data = {
+                "id": user.telegram_id,
+                "username": user.username,
+                "last_active": user.last_active.isoformat() if user.last_active else None,
+                "is_active": is_active
+            }
+            users_data.append(user_data)
+            
+            # Логируем статус каждого пользователя
+            logger.info(f"User {user.telegram_id} status: active={is_active}, last_active={user.last_active}")
+        
+        return {
+            "users": users_data
+        }
+    except Exception as e:
+        logger.error(f"Error getting users stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Модели Pydantic для валидации данных
 class OptionCreate(BaseModel):

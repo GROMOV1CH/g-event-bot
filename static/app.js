@@ -170,6 +170,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Загружаем начальные данные
     showContent('events-container', 'upcoming');
     loadEvents('upcoming');
+
+    // Запускаем периодическое обновление списка пользователей
+    if (document.getElementById('users-table-body')) {
+        // Первая загрузка
+        await loadUsersStats();
+        
+        // Обновляем каждые 30 секунд
+        setInterval(loadUsersStats, 30000);
+    }
 });
 
 // Настройка админ-панели
@@ -830,15 +839,27 @@ function loadAdminPolls() {
         .catch(error => console.error('Error loading admin polls:', error));
 }
 
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('ru-RU', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+function formatDate(date) {
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) { // меньше минуты
+        return 'только что';
+    } else if (diff < 3600000) { // меньше часа
+        const minutes = Math.floor(diff / 60000);
+        return `${minutes} мин. назад`;
+    } else if (diff < 86400000) { // меньше суток
+        const hours = Math.floor(diff / 3600000);
+        return `${hours} ч. назад`;
+    } else {
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
 }
 
 // Функции для работы с модальными окнами
@@ -1281,89 +1302,81 @@ function showContent(contentId, type = null) {
     }
 }
 
-// Функция загрузки статистики
-async function loadStats() {
+// Функция загрузки статистики пользователей
+async function loadUsersStats() {
     try {
-        const [statsResponse, usersResponse] = await Promise.all([
-            fetch('/api/stats'),
-            fetch('/api/admin/users')
-        ]);
-        
-        const stats = await statsResponse.json();
-        const usersData = await usersResponse.json();
-
-        // Статистика мероприятий
-        const eventsStats = document.getElementById('events-stats');
-        eventsStats.innerHTML = `
-            <div class="stat-item">
-                <span class="stat-label">Всего мероприятий</span>
-                <span class="stat-value">${stats.events.total}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Предстоящие</span>
-                <span class="stat-value">${stats.events.upcoming}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Прошедшие</span>
-                <span class="stat-value">${stats.events.past}</span>
-            </div>
-        `;
-
-        // Статистика опросов
-        const pollsStats = document.getElementById('polls-stats');
-        pollsStats.innerHTML = `
-            <div class="stat-item">
-                <span class="stat-label">Всего опросов</span>
-                <span class="stat-value">${stats.polls.total}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Активные</span>
-                <span class="stat-value">${stats.polls.active}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Завершенные</span>
-                <span class="stat-value">${stats.polls.completed}</span>
-            </div>
-        `;
+        const response = await fetch('/api/admin/users');
+        const usersData = await response.json();
 
         // Таблица пользователей
         const usersTableBody = document.getElementById('users-table-body');
-        usersTableBody.innerHTML = usersData.users.map(user => `
-            <tr class="${user.is_active ? 'active-user' : ''}">
-                <td>${user.id}</td>
-                <td>${user.username ? '@' + user.username : 'Нет username'}</td>
-                <td>
-                    ${user.is_active ? '<span class="status-badge active">Онлайн</span>' : formatDate(new Date(user.last_active))}
-                </td>
-            </tr>
-        `).join('');
-
+        if (usersTableBody) {
+            usersTableBody.innerHTML = usersData.users.map(user => `
+                <tr class="${user.is_active ? 'active-user' : ''}">
+                    <td>${user.id}</td>
+                    <td>${user.username ? '@' + user.username : 'Нет username'}</td>
+                    <td>
+                        ${user.is_active ? 
+                            '<span class="status-badge active">Онлайн</span>' : 
+                            (user.last_active ? formatDate(new Date(user.last_active)) : 'Никогда')}
+                    </td>
+                </tr>
+            `).join('');
+        }
     } catch (error) {
-        console.error('Error loading stats:', error);
+        console.error('Error loading users stats:', error);
     }
 }
 
-// Вспомогательная функция форматирования даты
-function formatDate(date) {
-    const now = new Date();
-    const diff = now - date;
-    
-    if (diff < 60000) { // меньше минуты
-        return 'только что';
-    } else if (diff < 3600000) { // меньше часа
-        const minutes = Math.floor(diff / 60000);
-        return `${minutes} мин. назад`;
-    } else if (diff < 86400000) { // меньше суток
-        const hours = Math.floor(diff / 3600000);
-        return `${hours} ч. назад`;
-    } else {
-        return date.toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+// Функция загрузки статистики
+async function loadStats() {
+    try {
+        const statsResponse = await fetch('/api/stats');
+        const stats = await statsResponse.json();
+
+        // Статистика мероприятий
+        const eventsStats = document.getElementById('events-stats');
+        if (eventsStats) {
+            eventsStats.innerHTML = `
+                <div class="stat-item">
+                    <span class="stat-label">Всего мероприятий</span>
+                    <span class="stat-value">${stats.events.total}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Предстоящие</span>
+                    <span class="stat-value">${stats.events.upcoming}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Прошедшие</span>
+                    <span class="stat-value">${stats.events.past}</span>
+                </div>
+            `;
+        }
+
+        // Статистика опросов
+        const pollsStats = document.getElementById('polls-stats');
+        if (pollsStats) {
+            pollsStats.innerHTML = `
+                <div class="stat-item">
+                    <span class="stat-label">Всего опросов</span>
+                    <span class="stat-value">${stats.polls.total}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Активные</span>
+                    <span class="stat-value">${stats.polls.active}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Завершенные</span>
+                    <span class="stat-value">${stats.polls.completed}</span>
+                </div>
+            `;
+        }
+
+        // Загружаем статистику пользователей
+        await loadUsersStats();
+
+    } catch (error) {
+        console.error('Error loading stats:', error);
     }
 }
 
