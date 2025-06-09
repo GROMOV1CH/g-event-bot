@@ -1,36 +1,125 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, and_, or_, func
-from models import Event, User, Poll, Vote, Base
-from datetime import datetime, timedelta, timezone
-from config import settings
+from datetime import datetime, timezone
 from typing import List, Optional
 import json
+import hmac
+import urllib.parse
+import logging
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session, sessionmaker, relationship
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from pydantic import BaseModel, Field
 import python_jwt as jwt
 import os
 import hashlib
-import hmac
-import urllib.parse
-from pydantic import BaseModel, Field
-import logging
+import os
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# Модели Pydantic для валидации данных
+class OptionCreate(BaseModel):
+    text: str
+
+class PollCreate(BaseModel):
+    title: str
+    description: str
+    end_date: datetime
+    options: List[OptionCreate]
+    created_by: Optional[int] = None
+
+class EventCreate(BaseModel):
+    title: str
+    description: str
+    date: datetime
+    location: Optional[str] = None
+    category: str = Field(default="other")
+    created_by: Optional[int] = None
+
 # Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./events.db")
+DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Определение моделей базы данных
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, unique=True, index=True)
+    username = Column(String, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    last_active = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    is_admin = Column(Boolean, default=False)
+    saved_events = relationship("SavedEvent", back_populates="user")
+    votes = relationship("Vote", back_populates="user")
+
+class Event(Base):
+    __tablename__ = "events"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    description = Column(String)
+    date = Column(DateTime(timezone=True))
+    location = Column(String)
+    category = Column(String)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    created_by = Column(Integer, ForeignKey("users.telegram_id"))
+    saved_by = relationship("SavedEvent", back_populates="event")
+
+class Poll(Base):
+    __tablename__ = "polls"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    description = Column(String)
+    end_date = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    created_by = Column(Integer, ForeignKey("users.telegram_id"))
+    options = relationship("PollOption", back_populates="poll")
+
+class PollOption(Base):
+    __tablename__ = "poll_options"
+    id = Column(Integer, primary_key=True, index=True)
+    poll_id = Column(Integer, ForeignKey("polls.id"))
+    text = Column(String)
+    poll = relationship("Poll", back_populates="options")
+    votes = relationship("Vote", back_populates="option")
+
+class Vote(Base):
+    __tablename__ = "votes"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.telegram_id"))
+    option_id = Column(Integer, ForeignKey("poll_options.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    user = relationship("User", back_populates="votes")
+    option = relationship("PollOption", back_populates="votes")
+
+class SavedEvent(Base):
+    __tablename__ = "saved_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.telegram_id"))
+    event_id = Column(Integer, ForeignKey("events.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    user = relationship("User", back_populates="saved_events")
+    event = relationship("Event", back_populates="saved_by")
+
+# Создание таблиц
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-# Подключаем шаблоны и статические файлы
-templates = Jinja2Templates(directory="templates")
+# Инициализация FastAPI
+app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 # Настройка CORS
 app.add_middleware(
@@ -663,23 +752,4 @@ async def get_users_stats(db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Error getting users stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Модели Pydantic для валидации данных
-class OptionCreate(BaseModel):
-    text: str
-
-class PollCreate(BaseModel):
-    title: str
-    description: str
-    end_date: datetime
-    options: List[OptionCreate]
-    created_by: Optional[int] = None
-
-class EventCreate(BaseModel):
-    title: str
-    description: str
-    date: datetime
-    location: Optional[str] = None
-    category: str = Field(default="other")
-    created_by: Optional[int] = None 
+        raise HTTPException(status_code=500, detail=str(e)) 
