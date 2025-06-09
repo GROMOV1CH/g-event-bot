@@ -598,4 +598,40 @@ async def get_stats(db: Session = Depends(get_db)):
             "active_today": active_today,
             "new_this_week": new_this_week
         }
+    }
+
+@app.get("/api/admin/users")
+async def get_users_stats(db: Session = Depends(get_db)):
+    """Получает статистику пользователей для админ-панели."""
+    now = datetime.now(timezone.utc)
+    
+    # Получаем всех пользователей
+    users = db.query(User).order_by(User.last_active.desc()).all()
+    
+    # Форматируем данные для ответа
+    users_data = []
+    for user in users:
+        user_data = {
+            "id": user.telegram_id,
+            "username": user.username,
+            "created_at": user.created_at.isoformat(),
+            "last_active": user.last_active.isoformat(),
+            "status": "active" if (now - user.last_active).total_seconds() < 3600 else "inactive",
+            "saved_events_count": len(user.saved_events),
+            "votes_count": len(user.votes)
+        }
+        users_data.append(user_data)
+    
+    # Считаем общую статистику
+    total_users = len(users)
+    active_users = sum(1 for u in users if (now - u.last_active).total_seconds() < 3600)
+    new_users_today = sum(1 for u in users if (now - u.created_at).total_seconds() < 86400)
+    
+    return {
+        "users": users_data,
+        "stats": {
+            "total": total_users,
+            "active_now": active_users,
+            "new_today": new_users_today
+        }
     } 

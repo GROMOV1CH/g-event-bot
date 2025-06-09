@@ -83,35 +83,27 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Настраиваем обработчики кнопок
     document.getElementById('upcoming-events-btn').addEventListener('click', () => {
-        showContent('events-container');
+        showContent('events-container', 'upcoming');
         loadEvents('upcoming');
-        updateActiveButton('upcoming-events-btn');
     });
 
     document.getElementById('past-events-btn').addEventListener('click', () => {
-        showContent('events-container');
+        showContent('events-container', 'past');
         loadEvents('past');
-        updateActiveButton('past-events-btn');
     });
 
     document.getElementById('polls-btn').addEventListener('click', () => {
         showContent('polls-container');
         loadPolls();
-        updateActiveButton('polls-btn');
     });
 
     document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
         showContent('admin-panel');
-        updateActiveButton('admin-panel-btn');
     });
 
     document.getElementById('profileButton').addEventListener('click', () => {
         showContent('my-events-container');
         loadMyEvents();
-        // Убираем активное состояние со всех кнопок навигации
-        document.querySelectorAll('.nav-menu .button').forEach(button => {
-            button.classList.remove('active');
-        });
     });
 
     // Функция для отображения нужной секции
@@ -166,9 +158,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
+    // Загружаем сохраненные мероприятия
+    loadSavedEvents();
+
+    // Настраиваем поиск и фильтры
+    setupSearchAndFilters();
+
+    // Настраиваем модальное окно напоминания
+    setupReminderModal();
+
     // Загружаем начальные данные
+    showContent('events-container', 'upcoming');
     loadEvents('upcoming');
-    loadPolls();
 });
 
 // Настройка админ-панели
@@ -244,15 +245,17 @@ function setupEventForm() {
             });
             
             if (response.ok) {
-                // Очищаем форму и скрываем её
                 form.reset();
                 document.getElementById('create-event-form').style.display = 'none';
                 document.getElementById('events-management').style.display = 'block';
                 
                 // Обновляем список мероприятий
-                loadEvents('upcoming');
+                if (document.getElementById('upcoming-events-btn').classList.contains('active')) {
+                    loadEvents('upcoming');
+                } else if (document.getElementById('past-events-btn').classList.contains('active')) {
+                    loadEvents('past');
+                }
                 
-                // Показываем уведомление об успехе
                 tg.showAlert('Мероприятие успешно создано!');
             } else {
                 const error = await response.json();
@@ -295,8 +298,8 @@ function setupPollForm() {
         e.preventDefault();
         
         const options = Array.from(form.querySelectorAll('input[name="options[]"]'))
-            .map(input => input.value)
-            .filter(value => value.trim() !== '');
+            .map(input => input.value.trim())
+            .filter(value => value !== '');
         
         if (options.length < 2) {
             tg.showAlert('Добавьте как минимум 2 варианта ответа');
@@ -304,11 +307,16 @@ function setupPollForm() {
         }
         
         const formData = {
-            title: form.title.value,
-            description: form.description.value,
+            title: form.title.value.trim(),
+            description: form.description.value.trim(),
             endDate: new Date(form.endDate.value).toISOString(),
             options: options.map(text => ({ text }))
         };
+        
+        if (!formData.title || !formData.description || !formData.endDate) {
+            tg.showAlert('Заполните все обязательные поля');
+            return;
+        }
         
         try {
             const response = await fetch('/api/polls', {
@@ -320,16 +328,12 @@ function setupPollForm() {
             });
             
             if (response.ok) {
-                // Очищаем форму и скрываем её
                 form.reset();
                 resetPollOptions();
                 document.getElementById('create-poll-form').style.display = 'none';
                 document.getElementById('polls-management').style.display = 'block';
                 
-                // Обновляем список опросов
                 loadPolls();
-                
-                // Показываем уведомление об успехе
                 tg.showAlert('Опрос успешно создан!');
             } else {
                 const error = await response.json();
@@ -1059,35 +1063,27 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Настраиваем обработчики кнопок
     document.getElementById('upcoming-events-btn').addEventListener('click', () => {
-        showContent('events-container');
+        showContent('events-container', 'upcoming');
         loadEvents('upcoming');
-        updateActiveButton('upcoming-events-btn');
     });
 
     document.getElementById('past-events-btn').addEventListener('click', () => {
-        showContent('events-container');
+        showContent('events-container', 'past');
         loadEvents('past');
-        updateActiveButton('past-events-btn');
     });
 
     document.getElementById('polls-btn').addEventListener('click', () => {
         showContent('polls-container');
         loadPolls();
-        updateActiveButton('polls-btn');
     });
 
     document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
         showContent('admin-panel');
-        updateActiveButton('admin-panel-btn');
     });
 
     document.getElementById('profileButton').addEventListener('click', () => {
         showContent('my-events-container');
         loadMyEvents();
-        // Убираем активное состояние со всех кнопок навигации
-        document.querySelectorAll('.nav-menu .button').forEach(button => {
-            button.classList.remove('active');
-        });
     });
 
     // Настраиваем поиск и фильтры
@@ -1097,6 +1093,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupReminderModal();
 
     // Загружаем начальные данные
+    showContent('events-container', 'upcoming');
     loadEvents('upcoming');
 });
 
@@ -1295,7 +1292,7 @@ function updateActiveButton(buttonId) {
 }
 
 // Функция отображения контента
-function showContent(contentId) {
+function showContent(contentId, type = null) {
     const containers = ['events-container', 'my-events-container', 'polls-container', 'admin-panel'];
     containers.forEach(id => {
         const element = document.getElementById(id);
@@ -1303,13 +1300,35 @@ function showContent(contentId) {
             element.style.display = id === contentId ? 'block' : 'none';
         }
     });
+
+    // Обновляем активные кнопки
+    document.querySelectorAll('.nav-menu .button').forEach(button => {
+        button.classList.remove('active');
+    });
+
+    if (contentId === 'events-container') {
+        if (type === 'upcoming') {
+            document.getElementById('upcoming-events-btn').classList.add('active');
+        } else if (type === 'past') {
+            document.getElementById('past-events-btn').classList.add('active');
+        }
+    } else if (contentId === 'polls-container') {
+        document.getElementById('polls-btn').classList.add('active');
+    } else if (contentId === 'admin-panel') {
+        document.getElementById('admin-panel-btn').classList.add('active');
+    }
 }
 
 // Функция загрузки статистики
 async function loadStats() {
     try {
-        const response = await fetch('/api/stats');
-        const stats = await response.json();
+        const [statsResponse, usersResponse] = await Promise.all([
+            fetch('/api/stats'),
+            fetch('/api/admin/users')
+        ]);
+        
+        const stats = await statsResponse.json();
+        const usersData = await usersResponse.json();
 
         // Статистика мероприятий
         const eventsStats = document.getElementById('events-stats');
@@ -1326,7 +1345,6 @@ async function loadStats() {
                 <span class="stat-label">Прошедшие</span>
                 <span class="stat-value">${stats.events.past}</span>
             </div>
-            <div class="chart-container" id="events-chart"></div>
         `;
 
         // Статистика опросов
@@ -1344,7 +1362,6 @@ async function loadStats() {
                 <span class="stat-label">Завершенные</span>
                 <span class="stat-value">${stats.polls.completed}</span>
             </div>
-            <div class="chart-container" id="polls-chart"></div>
         `;
 
         // Статистика пользователей
@@ -1352,20 +1369,60 @@ async function loadStats() {
         usersStats.innerHTML = `
             <div class="stat-item">
                 <span class="stat-label">Всего пользователей</span>
-                <span class="stat-value">${stats.users.total}</span>
+                <span class="stat-value">${usersData.stats.total}</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">Активные сегодня</span>
-                <span class="stat-value">${stats.users.active_today}</span>
+                <span class="stat-label">Активны сейчас</span>
+                <span class="stat-value">${usersData.stats.active_now}</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">Новые за неделю</span>
-                <span class="stat-value">${stats.users.new_this_week}</span>
+                <span class="stat-label">Новых сегодня</span>
+                <span class="stat-value">${usersData.stats.new_today}</span>
             </div>
-            <div class="chart-container" id="users-chart"></div>
         `;
+
+        // Таблица пользователей
+        const usersTableBody = document.getElementById('users-table-body');
+        usersTableBody.innerHTML = usersData.users.map(user => `
+            <tr>
+                <td>${user.id}</td>
+                <td>${user.username || 'Без имени'}</td>
+                <td>
+                    <span class="user-status ${user.status}">
+                        ${user.status === 'active' ? 'Онлайн' : 'Неактивен'}
+                    </span>
+                </td>
+                <td>${formatDate(new Date(user.last_active))}</td>
+                <td>${user.saved_events_count}</td>
+                <td>${user.votes_count}</td>
+            </tr>
+        `).join('');
 
     } catch (error) {
         console.error('Error loading stats:', error);
+    }
+}
+
+// Вспомогательная функция форматирования даты
+function formatDate(date) {
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) { // меньше минуты
+        return 'только что';
+    } else if (diff < 3600000) { // меньше часа
+        const minutes = Math.floor(diff / 60000);
+        return `${minutes} мин. назад`;
+    } else if (diff < 86400000) { // меньше суток
+        const hours = Math.floor(diff / 3600000);
+        return `${hours} ч. назад`;
+    } else {
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 } 
