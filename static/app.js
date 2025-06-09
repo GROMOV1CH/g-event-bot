@@ -141,13 +141,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
             
             const data = await response.json();
+            console.log('Admin check response:', data);
             
             if (data.is_admin) {
                 console.log('User is admin');
-                document.getElementById('adminButton').style.display = 'block';
+                document.getElementById('admin-panel-btn').style.display = 'block';
+                document.getElementById('admin-panel').style.display = 'none';
                 setupAdminPanel();
             } else {
-                console.log('User is not admin');
+                console.log('User is not admin:', data.error);
             }
         } catch (error) {
             console.error('Error checking admin rights:', error);
@@ -161,229 +163,215 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Настройка админ-панели
 function setupAdminPanel() {
-    const adminPanel = document.createElement('div');
-    adminPanel.id = 'adminPanel';
-    adminPanel.className = 'admin-controls';
+    const adminPanel = document.getElementById('admin-panel');
     
-    adminPanel.innerHTML = `
-        <h2>Панель администратора</h2>
-        <button class="admin-button" onclick="createEvent()">Создать мероприятие</button>
-        <button class="admin-button" onclick="createPoll()">Создать опрос</button>
-        <button class="admin-button" onclick="manageUsers()">Управление пользователями</button>
-    `;
-    
-    // Добавляем панель в секцию админа
-    const adminSection = document.getElementById('adminSection');
-    if (adminSection) {
-        adminSection.appendChild(adminPanel);
-    }
-}
-
-// Функции для работы с событиями
-async function loadEvents(type = 'upcoming') {
-    try {
-        const response = await fetch(`/api/events?type=${type}`);
-        const events = await response.json();
-        displayEvents(events, type);
-    } catch (error) {
-        console.error('Error loading events:', error);
-    }
-}
-
-// Загрузка опросов
-async function loadPolls() {
-    try {
-        const response = await fetch('/api/polls');
-        const polls = await response.json();
-        
-        pollsContainer.innerHTML = polls.length ? '' : '<div class="no-polls">Нет активных опросов</div>';
-        
-        polls.forEach(poll => {
-            const endDate = new Date(poll.endDate);
-            const isActive = endDate > new Date();
-            const card = document.createElement('div');
-            card.className = 'poll-card';
-            
-            let optionsHtml = '';
-            if (isActive) {
-                poll.options.forEach((option, index) => {
-                    optionsHtml += `
-                        <div class="poll-option">
-                            <input type="radio" name="poll_${poll.id}" value="${index}" id="option_${poll.id}_${index}">
-                            <label for="option_${poll.id}_${index}">${option.text}</label>
-                        </div>
-                    `;
-                });
-            } else {
-                // Показываем результаты
-                const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0);
-                poll.options.forEach(option => {
-                    const percentage = totalVotes > 0 ? (option.votes / totalVotes * 100).toFixed(1) : 0;
-                    optionsHtml += `
-                        <div class="poll-results">
-                            <div>${option.text} (${option.votes} голосов, ${percentage}%)</div>
-                            <div class="poll-bar">
-                                <div class="poll-bar-fill" style="width: ${percentage}%"></div>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
-
-            card.innerHTML = `
-                <h3>${poll.title}</h3>
-                <p>${poll.description}</p>
-                <div class="event-date">До: ${endDate.toLocaleString('ru-RU')}</div>
-                <div class="poll-options">
-                    ${optionsHtml}
-                </div>
-                ${isActive ? '<button class="button" onclick="submitVote(' + poll.id + ')">Проголосовать</button>' : ''}
-            `;
-            pollsContainer.appendChild(card);
-        });
-    } catch (error) {
-        console.error('Error loading polls:', error);
-        pollsContainer.innerHTML = '<div class="no-polls">Ошибка загрузки опросов</div>';
-    }
-}
-
-// Админ-панель
-if (adminPanel) {
-    const createEventBtn = document.getElementById('create-event-btn');
-    const createPollBtn = document.getElementById('create-poll-btn');
-    const eventForm = document.getElementById('create-event-form');
-    const pollForm = document.getElementById('create-poll-form');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    // Обработка табов
+    // Настраиваем табы
+    const tabButtons = adminPanel.querySelectorAll('.tab-button');
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
-            const tab = button.dataset.tab;
-            
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.style.display = 'none');
-            
-            button.classList.add('active');
-            document.getElementById(`${tab}-tab`).style.display = 'block';
+            const tabId = button.getAttribute('data-tab');
+            showAdminTab(tabId);
         });
     });
 
-    // Создание мероприятия
-    createEventBtn.addEventListener('click', () => {
-        eventForm.style.display = 'block';
-        createEventBtn.style.display = 'none';
+    // Настраиваем формы создания
+    setupEventForm();
+    setupPollForm();
+}
+
+// Функция для отображения табов админ-панели
+function showAdminTab(tabId) {
+    const tabs = document.querySelectorAll('.tab-content');
+    const buttons = document.querySelectorAll('.tab-button');
+
+    tabs.forEach(tab => {
+        tab.style.display = tab.id === `${tabId}-tab` ? 'block' : 'none';
     });
 
-    document.getElementById('cancel-create').addEventListener('click', () => {
-        eventForm.style.display = 'none';
-        createEventBtn.style.display = 'block';
+    buttons.forEach(button => {
+        button.classList.toggle('active', button.getAttribute('data-tab') === tabId);
+    });
+}
+
+// Функция настройки формы создания мероприятия
+function setupEventForm() {
+    const createBtn = document.getElementById('create-event-btn');
+    const form = document.getElementById('create-event-form');
+    const cancelBtn = document.getElementById('cancel-create');
+
+    createBtn.addEventListener('click', () => {
+        form.style.display = 'block';
+    });
+
+    cancelBtn.addEventListener('click', () => {
+        form.style.display = 'none';
     });
 
     document.getElementById('event-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
+        
         try {
             const response = await fetch('/api/events', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    title: formData.get('title'),
-                    description: formData.get('description'),
-                    date: formData.get('date'),
-                    location: formData.get('location')
-                })
+                body: JSON.stringify(Object.fromEntries(formData))
             });
 
             if (response.ok) {
-                eventForm.style.display = 'none';
-                createEventBtn.style.display = 'block';
+                form.style.display = 'none';
                 e.target.reset();
-                loadAdminData();
-                tg.showAlert('Мероприятие успешно создано!');
+                loadEvents('upcoming');
             } else {
-                throw new Error('Failed to create event');
+                console.error('Error creating event:', await response.text());
             }
         } catch (error) {
             console.error('Error creating event:', error);
-            tg.showAlert('Ошибка при создании мероприятия');
         }
     });
+}
 
-    // Создание опроса
-    createPollBtn.addEventListener('click', () => {
-        pollForm.style.display = 'block';
-        createPollBtn.style.display = 'none';
+// Функция настройки формы создания опроса
+function setupPollForm() {
+    const createBtn = document.getElementById('create-poll-btn');
+    const form = document.getElementById('create-poll-form');
+    const cancelBtn = document.getElementById('cancel-poll');
+    const addOptionBtn = document.getElementById('add-option');
+    const optionsContainer = document.getElementById('poll-options');
+
+    createBtn.addEventListener('click', () => {
+        form.style.display = 'block';
     });
 
-    document.getElementById('cancel-poll').addEventListener('click', () => {
-        pollForm.style.display = 'none';
-        createPollBtn.style.display = 'block';
+    cancelBtn.addEventListener('click', () => {
+        form.style.display = 'none';
     });
 
-    // Добавление опций для опроса
-    document.getElementById('add-option').addEventListener('click', () => {
-        const pollOptions = document.getElementById('poll-options');
-        const newOption = document.createElement('div');
-        newOption.className = 'poll-option';
-        newOption.innerHTML = `
+    addOptionBtn.addEventListener('click', () => {
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'poll-option';
+        optionDiv.innerHTML = `
             <input type="text" name="options[]" required>
             <button type="button" class="remove-option">✕</button>
         `;
-        pollOptions.appendChild(newOption);
+        optionsContainer.appendChild(optionDiv);
     });
 
-    // Удаление опций опроса
-    document.getElementById('poll-options').addEventListener('click', (e) => {
+    optionsContainer.addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-option')) {
-            const options = document.querySelectorAll('.poll-option');
-            if (options.length > 1) {
-                e.target.closest('.poll-option').remove();
-            }
+            e.target.parentElement.remove();
         }
     });
 
     document.getElementById('poll-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        const options = Array.from(formData.getAll('options[]')).map(text => ({ text, votes: 0 }));
-        
+        const data = {
+            title: formData.get('title'),
+            description: formData.get('description'),
+            endDate: formData.get('endDate'),
+            options: formData.getAll('options[]')
+        };
+
         try {
             const response = await fetch('/api/polls', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    title: formData.get('title'),
-                    description: formData.get('description'),
-                    endDate: formData.get('endDate'),
-                    options
-                })
+                body: JSON.stringify(data)
             });
 
             if (response.ok) {
-                pollForm.style.display = 'none';
-                createPollBtn.style.display = 'block';
+                form.style.display = 'none';
                 e.target.reset();
-                document.getElementById('poll-options').innerHTML = `
-                    <div class="poll-option">
-                        <input type="text" name="options[]" required>
-                        <button type="button" class="remove-option">✕</button>
-                    </div>
-                `;
-                loadAdminData();
-                tg.showAlert('Опрос успешно создан!');
+                loadPolls();
             } else {
-                throw new Error('Failed to create poll');
+                console.error('Error creating poll:', await response.text());
             }
         } catch (error) {
             console.error('Error creating poll:', error);
-            tg.showAlert('Ошибка при создании опроса');
         }
     });
+}
+
+// Функция загрузки мероприятий
+async function loadEvents(type = 'upcoming') {
+    const container = document.getElementById('events-container');
+    container.innerHTML = '<div class="loading">Загрузка мероприятий...</div>';
+
+    try {
+        const response = await fetch(`/api/events?type=${type}`);
+        const events = await response.json();
+
+        if (events.length === 0) {
+            container.innerHTML = '<div class="no-events">Нет мероприятий</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        events.forEach(event => {
+            const date = new Date(event.date);
+            const card = document.createElement('div');
+            card.className = 'event-card';
+            card.innerHTML = `
+                <h3>${event.title}</h3>
+                <div class="event-date">${date.toLocaleString('ru-RU')}</div>
+                <p>${event.description}</p>
+                ${event.location ? `<div class="location-info">${event.location}</div>` : ''}
+            `;
+            container.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error loading events:', error);
+        container.innerHTML = '<div class="error">Ошибка загрузки мероприятий</div>';
+    }
+}
+
+// Функция загрузки опросов
+async function loadPolls() {
+    const container = document.getElementById('polls-container');
+    container.innerHTML = '<div class="loading">Загрузка опросов...</div>';
+
+    try {
+        const response = await fetch('/api/polls');
+        const polls = await response.json();
+
+        if (polls.length === 0) {
+            container.innerHTML = '<div class="no-polls">Нет активных опросов</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        polls.forEach(poll => {
+            const endDate = new Date(poll.end_date);
+            const card = document.createElement('div');
+            card.className = 'poll-card';
+            card.innerHTML = `
+                <h3>${poll.title}</h3>
+                <p>${poll.description}</p>
+                <div class="poll-date">Окончание: ${endDate.toLocaleString('ru-RU')}</div>
+                <div class="poll-options">
+                    ${poll.options.map(option => `
+                        <div class="poll-option">
+                            <input type="radio" name="poll_${poll.id}" value="${option.id}">
+                            <label>${option.text}</label>
+                            <div class="poll-bar">
+                                <div class="poll-bar-fill" style="width: ${option.votes_percentage}%"></div>
+                            </div>
+                            <span class="votes-count">${option.votes_count} голосов</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error loading polls:', error);
+        container.innerHTML = '<div class="error">Ошибка загрузки опросов</div>';
+    }
 }
 
 // Загрузка данных для админ-панели

@@ -493,26 +493,12 @@ async def verify_admin(request: Request):
         if not user_id:
             return {"is_admin": False, "error": "No user ID provided"}
         
-        # Получаем список ID администраторов из переменной окружения
-        admin_ids_str = os.getenv("ADMIN_USER_IDS", "")
-        if not admin_ids_str:
-            return {"is_admin": False, "error": "No admin IDs configured"}
-            
-        # Преобразуем строку с ID в список чисел
-        try:
-            admin_ids = [int(id_str) for id_str in admin_ids_str.split(",") if id_str.strip()]
-        except ValueError:
-            return {"is_admin": False, "error": "Invalid admin IDs format"}
-        
-        # Проверяем, является ли пользователь администратором
-        is_admin = user_id in admin_ids
-        
-        print(f"Checking admin rights for user {user_id}. Admin IDs: {admin_ids}. Is admin: {is_admin}")
+        # Список ID администраторов (замените на ваш ID)
+        admin_ids = [1234567890]  # Замените на ваш ID из Telegram
         
         return {
-            "is_admin": is_admin,
+            "is_admin": user_id in admin_ids,
             "user_id": user_id
         }
     except Exception as e:
-        print(f"Error in verify_admin: {str(e)}")
         return {"is_admin": False, "error": str(e)} 
