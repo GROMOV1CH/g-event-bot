@@ -13,13 +13,27 @@
             <h1>Управление мероприятиями</h1>
         </header>
 
+        <div class="profile-section">
+            <img src="{{ url_for('static', path='images/panda.jpg') }}" alt="Профиль" class="profile-image">
+        </div>
+
         <div class="button-group">
-            <button id="upcoming-events-btn" class="button">Предстоящие мероприятия</button>
-            <button id="past-events-btn" class="button">Прошедшие мероприятия</button>
+            <button id="upcoming-events-btn" class="button">
+                📅 Предстоящие мероприятия
+            </button>
+            <button id="past-events-btn" class="button">
+                📜 Прошедшие мероприятия
+            </button>
+            {% if is_admin %}
+            <a href="/admin" class="button">
+                ⚙️ Панель администратора
+            </a>
+            {% endif %}
         </div>
 
         <div id="events-container" class="events-list">
             <!-- События будут добавлены через JavaScript -->
+            <div class="no-events">Загрузка мероприятий...</div>
         </div>
     </div>
 
