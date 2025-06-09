@@ -14,6 +14,12 @@ import os
 import hashlib
 import hmac
 import urllib.parse
+from pydantic import BaseModel, Field
+import logging
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./events.db")
@@ -619,3 +625,22 @@ async def update_user_activity(request: Request, call_next):
             logger.error(f"Error updating user activity: {e}")
     
     return response 
+
+# Модели Pydantic для валидации данных
+class OptionCreate(BaseModel):
+    text: str
+
+class PollCreate(BaseModel):
+    title: str
+    description: str
+    end_date: datetime
+    options: List[OptionCreate]
+    created_by: Optional[int] = None
+
+class EventCreate(BaseModel):
+    title: str
+    description: str
+    date: datetime
+    location: Optional[str] = None
+    category: str = Field(default="other")
+    created_by: Optional[int] = None 
