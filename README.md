@@ -112,4 +112,4 @@ python bot.py
 - `models.py` - модели базы данных
 - `bot.py` - логика телеграм бота
 - `webapp.py` - FastAPI веб-приложение
-- `config.py` - конфигурация приложения 
+- `config.py` - конфигурация приложения # g-event-bot
