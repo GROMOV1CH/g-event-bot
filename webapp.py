@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from config import settings
 import os
 from fastapi import Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI()
@@ -109,12 +109,12 @@ async def subscribe_to_event(
     db.commit()
     return {"status": "success"}
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+@app.get("/")
+async def root():
     return {"message": "Event Management Bot API"}
 
-@app.get("/webapp", response_class=HTMLResponse)
-async def webapp(request: Request):
+@app.get("/webapp")
+async def webapp():
     return {"message": "Web App Interface Coming Soon"}
 
 # Добавляем конфигурацию для gunicorn

@@ -3,10 +3,8 @@ services:
     name: g-event-bot-webapp
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m gunicorn webapp:app
+    startCommand: uvicorn webapp:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: PORT
-        value: 10000
     autoDeploy: true 
