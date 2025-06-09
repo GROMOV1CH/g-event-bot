@@ -1,10 +1,12 @@
 :root {
-    --primary-color: #ff7043;
-    --secondary-color: #ffab91;
-    --background-color: #fff3e0;
-    --text-color: #333;
+    --primary-color: #FF7F50; /* Коралловый/оранжевый */
+    --secondary-color: #FFDAB9; /* Персиковый */
+    --gradient-start: #FFDAB9; /* Персиковый */
+    --gradient-end: #FF7F50; /* Коралловый/оранжевый */
+    --background-color: #FFF5EE; /* Светлый персиковый для фона */
+    --text-color: #444;
     --border-radius: 12px;
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --shadow: 0 2px 4px rgba(255, 127, 80, 0.2);
 }
 
 body {
@@ -27,6 +29,11 @@ body {
 .header {
     text-align: center;
     margin-bottom: 20px;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    border-radius: 0 0 30px 30px;
+    box-shadow: 0 4px 15px rgba(255, 127, 80, 0.2);
+    margin: -20px -20px 20px -20px;
     position: relative;
     z-index: 2;
 }
@@ -36,11 +43,12 @@ body {
 }
 
 .profile-image {
-    width: 80px;
-    height: 80px;
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid var(--primary-color);
+    border: 4px solid white;
+    box-shadow: 0 4px 15px rgba(255, 127, 80, 0.3);
 }
 
 .nav-menu {
@@ -62,7 +70,7 @@ body {
 }
 
 .button {
-    background: var(--tg-theme-button-color, var(--primary-color));
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
     color: var(--tg-theme-button-text-color, white);
     border: none;
     border-radius: var(--border-radius);
@@ -72,23 +80,26 @@ body {
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
     z-index: 1;
     transform: translateZ(0);
+    box-shadow: var(--shadow);
 }
 
 .button:active {
-    opacity: 0.8;
+    opacity: 0.9;
     transform: translateZ(0) scale(0.98);
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
 }
 
 .button.active {
-    background: var(--tg-theme-button-color, var(--secondary-color));
+    background: var(--primary-color);
+    box-shadow: 0 4px 15px rgba(255, 127, 80, 0.3);
 }
 
 .button-secondary {
-    background: var(--tg-theme-secondary-bg-color, var(--secondary-color));
+    background: var(--secondary-color);
     color: var(--text-color);
 }
 
@@ -99,26 +110,48 @@ body {
 .event-card {
     background: var(--tg-theme-bg-color, white);
     border-radius: var(--border-radius);
-    padding: 15px;
+    padding: 20px;
     margin-bottom: 15px;
     box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 127, 80, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.event-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 127, 80, 0.15);
 }
 
 .event-card h3 {
     margin: 0 0 10px;
     color: var(--primary-color);
+    font-size: 18px;
 }
 
 .event-date {
     font-size: 14px;
-    color: var(--text-color);
+    color: var(--primary-color);
     margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.event-date::before {
+    content: "📅";
 }
 
 .location-info {
     font-size: 14px;
     color: var(--text-color);
     margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.location-info::before {
+    content: "📍";
 }
 
 .admin-panel {
@@ -126,6 +159,7 @@ body {
     border-radius: var(--border-radius);
     padding: 20px;
     margin-top: 20px;
+    box-shadow: var(--shadow);
 }
 
 .admin-tabs {
@@ -142,6 +176,7 @@ body {
     color: var(--text-color);
     cursor: pointer;
     position: relative;
+    transition: color 0.3s ease;
 }
 
 .tab-button.active {
@@ -172,11 +207,20 @@ body {
 .form-group input[type="datetime-local"],
 .form-group textarea {
     width: 100%;
-    padding: 8px;
+    padding: 12px;
     border: 1px solid var(--secondary-color);
     border-radius: var(--border-radius);
     background: var(--tg-theme-bg-color, white);
     color: var(--text-color);
+    font-size: 14px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(255, 127, 80, 0.1);
 }
 
 .form-actions {
@@ -189,6 +233,7 @@ body {
     display: flex;
     gap: 10px;
     margin-bottom: 10px;
+    align-items: center;
 }
 
 .remove-option {
@@ -197,17 +242,64 @@ body {
     color: #ff5252;
     cursor: pointer;
     padding: 0 5px;
+    font-size: 18px;
+    transition: transform 0.2s ease;
+}
+
+.remove-option:hover {
+    transform: scale(1.1);
 }
 
 .no-events, .no-polls {
     text-align: center;
+    padding: 30px;
+    color: var(--text-color);
+    background: rgba(255, 127, 80, 0.05);
+    border-radius: var(--border-radius);
+    margin: 20px 0;
+}
+
+.poll-card {
+    background: var(--tg-theme-bg-color, white);
+    border-radius: var(--border-radius);
     padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(255, 127, 80, 0.1);
+}
+
+.poll-bar {
+    background: rgba(255, 127, 80, 0.1);
+    border-radius: 10px;
+    height: 20px;
+    margin: 5px 0;
+    overflow: hidden;
+}
+
+.poll-bar-fill {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.votes-count {
+    font-size: 12px;
     color: var(--text-color);
 }
 
 @media (max-width: 480px) {
     .container {
         padding: 10px;
+    }
+    
+    .header {
+        padding: 30px 15px;
+        margin: -10px -10px 15px -10px;
+    }
+    
+    .profile-image {
+        width: 100px;
+        height: 100px;
     }
     
     .button {
@@ -221,5 +313,14 @@ body {
     
     .form-actions .button {
         width: 100%;
+    }
+    
+    .admin-tabs {
+        overflow-x: auto;
+    }
+    
+    .tab-button {
+        padding: 8px 15px;
+        font-size: 14px;
     }
 } 

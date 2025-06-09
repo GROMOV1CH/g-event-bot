@@ -300,14 +300,16 @@ function setupPollForm() {
 // Функция загрузки мероприятий
 async function loadEvents(type = 'upcoming') {
     const container = document.getElementById('events-container');
-    container.innerHTML = '<div class="loading">Загрузка мероприятий...</div>';
+    container.innerHTML = '<div class="loading">Загрузка...</div>';
 
     try {
         const response = await fetch(`/api/events?type=${type}`);
         const events = await response.json();
 
         if (events.length === 0) {
-            container.innerHTML = '<div class="no-events">Нет мероприятий</div>';
+            container.innerHTML = type === 'upcoming' ? 
+                '<div class="no-events">Нет предстоящих мероприятий</div>' : 
+                '<div class="no-events">Нет прошедших мероприятий</div>';
             return;
         }
 
@@ -333,7 +335,7 @@ async function loadEvents(type = 'upcoming') {
 // Функция загрузки опросов
 async function loadPolls() {
     const container = document.getElementById('polls-container');
-    container.innerHTML = '<div class="loading">Загрузка опросов...</div>';
+    container.innerHTML = '<div class="loading">Загрузка...</div>';
 
     try {
         const response = await fetch('/api/polls');
@@ -356,8 +358,8 @@ async function loadPolls() {
                 <div class="poll-options">
                     ${poll.options.map(option => `
                         <div class="poll-option">
-                            <input type="radio" name="poll_${poll.id}" value="${option.id}">
-                            <label>${option.text}</label>
+                            <input type="radio" name="poll_${poll.id}" value="${option.id}" id="option_${poll.id}_${option.id}">
+                            <label for="option_${poll.id}_${option.id}">${option.text}</label>
                             <div class="poll-bar">
                                 <div class="poll-bar-fill" style="width: ${option.votes_percentage}%"></div>
                             </div>
