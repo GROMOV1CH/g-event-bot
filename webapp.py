@@ -487,20 +487,32 @@ async def verify_admin(request: Request):
     """Проверяет права администратора для Telegram Web App."""
     try:
         data = await request.json()
-        init_data = data.get('initData')
         user_data = data.get('user', {})
+        user_id = user_data.get('id')
         
-        # Проверяем подлинность данных
-        if init_data:
-            verified_data = verify_telegram_data(init_data)
-            user_id = int(user_data.get('id', 0))
+        if not user_id:
+            return {"is_admin": False, "error": "No user ID provided"}
+        
+        # Получаем список ID администраторов из переменной окружения
+        admin_ids_str = os.getenv("ADMIN_USER_IDS", "")
+        if not admin_ids_str:
+            return {"is_admin": False, "error": "No admin IDs configured"}
             
-            # Проверяем, является ли пользователь администратором
-            admin_ids = list(map(int, os.getenv("ADMIN_USER_IDS", "").split(",")))
-            is_admin = user_id in admin_ids
-            
-            return {"is_admin": is_admin}
+        # Преобразуем строку с ID в список чисел
+        try:
+            admin_ids = [int(id_str) for id_str in admin_ids_str.split(",") if id_str.strip()]
+        except ValueError:
+            return {"is_admin": False, "error": "Invalid admin IDs format"}
+        
+        # Проверяем, является ли пользователь администратором
+        is_admin = user_id in admin_ids
+        
+        print(f"Checking admin rights for user {user_id}. Admin IDs: {admin_ids}. Is admin: {is_admin}")
+        
+        return {
+            "is_admin": is_admin,
+            "user_id": user_id
+        }
     except Exception as e:
-        print(f"Error verifying admin: {e}")
-    
-    return {"is_admin": False} 
+        print(f"Error in verify_admin: {str(e)}")
+        return {"is_admin": False, "error": str(e)} 
