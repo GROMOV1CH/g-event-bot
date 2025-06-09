@@ -493,12 +493,15 @@ async def verify_admin(request: Request):
         if not user_id:
             return {"is_admin": False, "error": "No user ID provided"}
         
-        # Список ID администраторов (замените на ваш ID)
-        admin_ids = [1234567890]  # Замените на ваш ID из Telegram
+        # Список ID администраторов
+        admin_ids = [677621800]  # Ваш Telegram ID
+        
+        print(f"Checking admin rights for user {user_id}. Is admin: {user_id in admin_ids}")
         
         return {
             "is_admin": user_id in admin_ids,
             "user_id": user_id
         }
     except Exception as e:
+        print(f"Error in verify_admin: {str(e)}")
         return {"is_admin": False, "error": str(e)} 
