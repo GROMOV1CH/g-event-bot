@@ -8,6 +8,10 @@ from models import Base, Event, User, Reminder
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config import settings
+import os
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 app = FastAPI()
 
@@ -19,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Настройка шаблонов
+templates = Jinja2Templates(directory="templates")
 
 # Инициализация базы данных
 engine = create_engine(settings.DATABASE_URL)
@@ -102,6 +109,16 @@ async def subscribe_to_event(
     db.commit()
     return {"status": "success"}
 
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    return {"message": "Event Management Bot API"}
+
+@app.get("/webapp", response_class=HTMLResponse)
+async def webapp(request: Request):
+    return {"message": "Web App Interface Coming Soon"}
+
+# Добавляем конфигурацию для gunicorn
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("webapp:app", host="0.0.0.0", port=port, reload=True) 
