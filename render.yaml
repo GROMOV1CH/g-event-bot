@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: tg-event-bot-webapp
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn_config.py webapp:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    autoDeploy: true 
