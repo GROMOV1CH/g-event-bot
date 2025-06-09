@@ -93,49 +93,84 @@ async function initUser() {
     }
 }
 
+// Функция для проверки прав администратора
+async function checkAdminRights() {
+    try {
+        const tg = window.Telegram.WebApp;
+        const response = await fetch('/api/verify_admin', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                initData: tg.initData,
+                user: tg.initDataUnsafe?.user
+            })
+        });
+        
+        const data = await response.json();
+        console.log('Admin check response:', data);
+        
+        if (data.is_admin) {
+            console.log('User is admin');
+            document.getElementById('admin-panel-btn').style.display = 'block';
+            setupAdminPanel();
+        } else {
+            console.log('User is not admin:', data.error);
+            document.getElementById('admin-panel-btn').style.display = 'none';
+        }
+        
+        return data.is_admin;
+    } catch (error) {
+        console.error('Error checking admin rights:', error);
+        return false;
+    }
+}
+
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', async function() {
     try {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
         // Инициализируем пользователя
         await initUser();
         
+        // Проверяем права администратора
+        await checkAdminRights();
+
         // Настраиваем обработчики кнопок
         document.getElementById('upcoming-events-btn').addEventListener('click', () => {
             showContent('events-container', 'upcoming');
-            loadEvents('upcoming');
         });
 
         document.getElementById('past-events-btn').addEventListener('click', () => {
             showContent('events-container', 'past');
-            loadEvents('past');
         });
 
         document.getElementById('polls-btn').addEventListener('click', () => {
             showContent('polls-container');
-            loadPolls();
         });
 
         document.getElementById('admin-panel-btn')?.addEventListener('click', () => {
             showContent('admin-panel');
         });
 
-        document.getElementById('profileButton').addEventListener('click', () => {
-            showContent('my-events-container');
-            loadMyEvents();
-        });
+        // Загружаем начальные данные
+        showContent('events-container', 'upcoming');
 
         // Запускаем периодическое обновление списка пользователей
         if (document.getElementById('users-table-body')) {
-            // Первая загрузка
-            await loadUsersStats();
-            
-            // Обновляем каждые 30 секунд
             setInterval(loadUsersStats, 30000);
         }
 
-        // Загружаем начальные данные
-        showContent('events-container', 'upcoming');
-        loadEvents('upcoming');
+        // Настраиваем формы создания
+        setupEventForm();
+        setupPollForm();
+        
+        // Настраиваем поиск и фильтры
+        setupSearchAndFilters();
     } catch (error) {
         console.error('Error during initialization:', error);
         tg.showAlert('Произошла ошибка при инициализации приложения');
@@ -1236,12 +1271,12 @@ function updateActiveButton(buttonId) {
 }
 
 // Функция отображения контента
-function showContent(contentId, type = null) {
+function showContent(containerId, type = '') {
     const containers = ['events-container', 'my-events-container', 'polls-container', 'admin-panel'];
     containers.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.style.display = id === contentId ? 'block' : 'none';
+        const container = document.getElementById(id);
+        if (container) {
+            container.style.display = id === containerId ? 'block' : 'none';
         }
     });
 
@@ -1250,16 +1285,27 @@ function showContent(contentId, type = null) {
         button.classList.remove('active');
     });
 
-    if (contentId === 'events-container') {
+    if (containerId === 'events-container') {
         if (type === 'upcoming') {
             document.getElementById('upcoming-events-btn').classList.add('active');
         } else if (type === 'past') {
             document.getElementById('past-events-btn').classList.add('active');
         }
-    } else if (contentId === 'polls-container') {
+    } else if (containerId === 'polls-container') {
         document.getElementById('polls-btn').classList.add('active');
-    } else if (contentId === 'admin-panel') {
+    } else if (containerId === 'admin-panel') {
         document.getElementById('admin-panel-btn').classList.add('active');
+    }
+
+    // Загружаем соответствующие данные
+    if (containerId === 'events-container') {
+        loadEvents(type);
+    } else if (containerId === 'polls-container') {
+        loadPolls();
+    } else if (containerId === 'admin-panel') {
+        loadUsersStats();
+    } else if (containerId === 'my-events-container') {
+        loadMyEvents();
     }
 }
 
@@ -1267,23 +1313,22 @@ function showContent(contentId, type = null) {
 async function loadUsersStats() {
     try {
         const response = await fetch('/api/admin/users');
-        const usersData = await response.json();
+        const data = await response.json();
+        
+        const tableBody = document.getElementById('users-table-body');
+        if (!tableBody) return;
 
-        // Таблица пользователей
-        const usersTableBody = document.getElementById('users-table-body');
-        if (usersTableBody) {
-            usersTableBody.innerHTML = usersData.users.map(user => `
-                <tr class="${user.is_active ? 'active-user' : ''}">
-                    <td>${user.id}</td>
-                    <td>${user.username ? '@' + user.username : 'Нет username'}</td>
-                    <td>
-                        ${user.is_active ? 
-                            '<span class="status-badge active">Онлайн</span>' : 
-                            (user.last_active ? formatDate(new Date(user.last_active)) : 'Никогда')}
-                    </td>
-                </tr>
-            `).join('');
-        }
+        tableBody.innerHTML = '';
+        data.users.forEach(user => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${user.id}</td>
+                <td>${user.username || 'Аноним'}</td>
+                <td>${user.is_active ? 'Онлайн' : 'Оффлайн'}</td>
+                <td>${user.last_active ? new Date(user.last_active).toLocaleString() : 'Никогда'}</td>
+            `;
+            tableBody.appendChild(row);
+        });
     } catch (error) {
         console.error('Error loading users stats:', error);
     }
