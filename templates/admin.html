@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель - Управление мероприятиями</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Админ-панель</h1>
+        </header>
+
+        <div class="admin-controls">
+            <h2>Создать мероприятие</h2>
+            <form id="create-event-form">
+                <div class="form-group">
+                    <label for="title">Название мероприятия</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Описание</label>
+                    <textarea id="description" name="description" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date">Дата и время</label>
+                    <input type="datetime-local" id="date" name="date" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="location">Место проведения</label>
+                    <input type="text" id="location" name="location">
+                </div>
+                
+                <button type="submit" class="button">Создать мероприятие</button>
+            </form>
+        </div>
+
+        <div class="events-management">
+            <h2>Управление мероприятиями</h2>
+            <div id="events-container" class="events-list">
+                <!-- События будут добавлены через JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='app.js') }}"></script>
+    <script>
+        // Дополнительный код для админ-панели
+        document.getElementById('create-event-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const eventData = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                date: formData.get('date'),
+                location: formData.get('location')
+            };
+
+            try {
+                const response = await fetch('/api/admin/events', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(eventData)
+                });
+
+                if (response.ok) {
+                    alert('Мероприятие успешно создано!');
+                    e.target.reset();
+                    // Обновляем список мероприятий
+                    const events = await fetchUpcomingEvents();
+                    displayEvents(events, 'events-container');
+                } else {
+                    alert('Ошибка при создании мероприятия');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка при создании мероприятия');
+            }
+        });
+    </script>
+</body>
+</html> 
