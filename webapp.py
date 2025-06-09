@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, and_, or_
-from models import Event, User, Poll, Vote
+from models import Event, User, Poll, Vote, Base
 from datetime import datetime, timedelta, timezone
 from config import settings
 from typing import List, Optional

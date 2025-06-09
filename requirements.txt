@@ -11,4 +11,4 @@ python-telegram-bot==20.6
 aiofiles==23.2.1
 aiohttp==3.9.3
 psycopg2-binary==2.9.9
-pydantic==2.6.1 
+pydantic>=2.4.1,<2.6 
