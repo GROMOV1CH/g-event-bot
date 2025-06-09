@@ -11,6 +11,9 @@ from typing import List, Optional
 import json
 import python_jwt as jwt
 import os
+import hashlib
+import hmac
+import urllib.parse
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./events.db")
@@ -443,4 +446,61 @@ async def vote_in_poll(
     poll.options[option_index]['votes'] += 1
     
     db.commit()
-    return {"message": "Vote recorded successfully"} 
+    return {"message": "Vote recorded successfully"}
+
+def verify_telegram_data(init_data: str) -> dict:
+    """Проверяет подлинность данных от Telegram Web App."""
+    try:
+        # Разбираем строку init_data
+        parsed_data = dict(urllib.parse.parse_qsl(init_data))
+        
+        # Получаем и удаляем hash из данных
+        received_hash = parsed_data.pop('hash')
+        
+        # Сортируем оставшиеся поля
+        data_check_string = '\n'.join([f"{k}={v}" for k, v in sorted(parsed_data.items())])
+        
+        # Создаем секретный ключ
+        secret_key = hmac.new(
+            "WebAppData".encode(),
+            os.getenv("BOT_TOKEN").encode(),
+            hashlib.sha256
+        ).digest()
+        
+        # Вычисляем хеш
+        calculated_hash = hmac.new(
+            secret_key,
+            data_check_string.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Сравниваем хеши
+        if calculated_hash != received_hash:
+            raise ValueError("Invalid hash")
+        
+        return parsed_data
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid Telegram data")
+
+@app.post("/api/verify_admin")
+async def verify_admin(request: Request):
+    """Проверяет права администратора для Telegram Web App."""
+    try:
+        data = await request.json()
+        init_data = data.get('initData')
+        user_data = data.get('user', {})
+        
+        # Проверяем подлинность данных
+        if init_data:
+            verified_data = verify_telegram_data(init_data)
+            user_id = int(user_data.get('id', 0))
+            
+            # Проверяем, является ли пользователь администратором
+            admin_ids = list(map(int, os.getenv("ADMIN_USER_IDS", "").split(",")))
+            is_admin = user_id in admin_ids
+            
+            return {"is_admin": is_admin}
+    except Exception as e:
+        print(f"Error verifying admin: {e}")
+    
+    return {"is_admin": False} 

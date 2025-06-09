@@ -607,7 +607,30 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // Проверяем права администратора при загрузке
-    checkAdminRights();
+    const initData = tg.initData || '';
+    const user = tg.initDataUnsafe?.user || {};
+    
+    // Отправляем initData на сервер для проверки
+    fetch('/api/verify_admin', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            initData: initData,
+            user: user
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.is_admin) {
+            document.getElementById('adminButton').style.display = 'block';
+            loadAdminData();
+        }
+    })
+    .catch(error => console.error('Error checking admin rights:', error));
+
+    // Загружаем начальные данные
     loadEvents('upcoming');
     loadPolls();
 });
